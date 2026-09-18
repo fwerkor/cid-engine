@@ -19,7 +19,7 @@ model and for semantic-reference tests; it is not the execution core.
     +-----------------------+
               |
               +---- CPU
-              +---- CUDA       (native fused kernels are next)
+              +---- CUDA       (fused display-statistics kernel)
               +---- Ascend     (planned)
 
 The current C++ core owns four CID-specific primitives:
@@ -90,7 +90,7 @@ scheduler and memory-planner logic.
 
 ## Roadmap
 
-1. Replace the hottest composite C++ operators with fused CUDA kernels.
+1. Expand fused CUDA coverage beyond display-token statistics.
 2. Add native CPU kernels where they materially improve latency.
 3. Move diffusion-state transitions and TCT packing into an execution plan.
 4. Add CID-aware buffer lifetime and stream scheduling.

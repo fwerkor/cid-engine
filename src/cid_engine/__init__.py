@@ -6,6 +6,7 @@ from torch import Tensor
 from cid_engine import _C  # noqa: F401
 
 __version__ = "0.2.0"
+CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 
 
 def live_slot_occupancy(
@@ -58,6 +59,7 @@ def display_token_statistics(
 
 
 __all__ = [
+    "CUDA_BACKEND_BUILT",
     "display_token_statistics",
     "live_slot_occupancy",
     "prefix_allocation_mask",

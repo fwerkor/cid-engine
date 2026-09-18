@@ -112,3 +112,7 @@ def test_non_int64_display_ids_are_rejected() -> None:
 def test_native_ops_are_registered() -> None:
     assert hasattr(torch.ops.cid_engine, "display_token_statistics")
     assert hasattr(torch.ops.cid_engine, "prefix_allocation_mask")
+
+
+def test_cuda_build_flag_is_boolean() -> None:
+    assert isinstance(cid_engine.CUDA_BACKEND_BUILT, bool)
