@@ -5,7 +5,8 @@ import time
 
 import torch
 
-from cid_engine import CIDEngine
+import cid_engine
+from cid_engine import reference
 
 
 def _synchronize(device: torch.device) -> None:
@@ -36,7 +37,7 @@ def _assert_equivalent(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Benchmark cid-engine display statistics")
+    parser = argparse.ArgumentParser(description="Benchmark cid-engine C++ display statistics")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--tokens", type=int, default=128)
@@ -61,30 +62,25 @@ def main() -> None:
         dtype=dtype,
     )
 
-    engines = {name: CIDEngine(name) for name in ("reference", "torch", "compile")}
-    outputs = {
-        name: engine.display_token_statistics(token_ids, logits)
-        for name, engine in engines.items()
-    }
+    reference_output = reference.display_token_statistics(token_ids, logits)
+    cpp_output = cid_engine.display_token_statistics(token_ids, logits)
     _synchronize(device)
-    for name in ("torch", "compile"):
-        _assert_equivalent(outputs["reference"], outputs[name])
+    _assert_equivalent(reference_output, cpp_output)
 
     reference_ms = _time_call(
-        lambda: engines["reference"].display_token_statistics(token_ids, logits),
+        lambda: reference.display_token_statistics(token_ids, logits),
+        device=device,
+        warmup=args.warmup,
+        iterations=args.iterations,
+    )
+    cpp_ms = _time_call(
+        lambda: cid_engine.display_token_statistics(token_ids, logits),
         device=device,
         warmup=args.warmup,
         iterations=args.iterations,
     )
     print(f"reference {reference_ms:9.3f} ms  1.00x")
-    for name in ("torch", "compile"):
-        elapsed = _time_call(
-            lambda name=name: engines[name].display_token_statistics(token_ids, logits),
-            device=device,
-            warmup=args.warmup,
-            iterations=args.iterations,
-        )
-        print(f"{name:9s} {elapsed:9.3f} ms  {reference_ms / elapsed:4.2f}x")
+    print(f"cpp       {cpp_ms:9.3f} ms  {reference_ms / cpp_ms:4.2f}x")
 
 
 if __name__ == "__main__":

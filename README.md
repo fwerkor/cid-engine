@@ -1,97 +1,101 @@
 # cid-engine
 
-`cid-engine` is the execution-engine project for **Continuous Interaction Diffusion (CID)**.
+cid-engine is the native execution engine for Continuous Interaction Diffusion (CID).
 
-The goal is to move CID-specific tensor and runtime work out of generic framework code while
-preserving the algorithmic semantics of the reference implementation. The project starts with a
-small, testable tensor execution layer rather than attempting to reimplement autograd,
-distributed training, or device libraries from day one.
+The engine core is written in C++20. Python is a thin integration surface for the current CID
+model and for semantic-reference tests; it is not the execution core.
 
-## What exists now
+## Architecture
 
-The initial engine extracts CID hot-path primitives behind three backends:
+    CID Python/model frontend
+              |
+              v
+       thin Python API
+              |
+              v
+    +-----------------------+
+    | cid-engine C++20 core |
+    | ATen custom operators |
+    +-----------------------+
+              |
+              +---- CPU
+              +---- CUDA       (native fused kernels are next)
+              +---- Ascend     (planned)
 
-- `reference`: deliberately straightforward PyTorch implementations used as the semantic oracle.
-- `torch`: vectorized eager implementations that preserve the same discrete decisions.
-- `compile`: the same optimized kernels wrapped by `torch.compile`.
-
-The first primitives cover:
+The current C++ core owns four CID-specific primitives:
 
 - live thought-slot occupancy with retired-slot masking;
 - deterministic first-free prefix allocation;
 - thought diffusion corruption from a supplied epsilon tensor;
-- display-token confidence extraction without materializing the full softmax tensor.
+- display-token confidence/prediction statistics.
 
-The display primitive is especially relevant to CID decoding. The current reference path computes
-a full probability tensor to obtain only three values per token: the predicted token, its
-confidence, and the confidence of the current token. `cid-engine` computes those values from
-`max`, `logsumexp`, and `gather`, reducing temporary memory while retaining the same mathematical
-definition.
+They are registered as torch.ops.cid_engine C++ operators, so tensors cross the Python/C++
+boundary without NumPy copies. The pure-Python implementation remains only as a semantic oracle.
 
 ## Semantic contract
 
-Optimizations in the default engine are allowed to change floating-point reduction order, but not
-CID decisions or model/runtime policy.
+The default engine may change floating-point reduction order, but it must not change CID
+algorithmic decisions or runtime policy.
 
-The test suite therefore requires:
+Tests require exact equality for boolean masks, allocation decisions, token IDs, and argmax
+results, plus numerically close floating-point outputs for mathematically equivalent reductions.
 
-- exact equality for boolean masks, token IDs, allocation decisions, and argmax results;
-- numerically close floating-point values for equivalent reductions;
-- identical behavior across the reference and optimized backends for tested shapes and dtypes.
+Hot-path native operators assume token IDs already satisfy the model vocabulary contract; CID validates
+that invariant when constructing the display tensor, avoiding a device-to-host synchronization per step.
 
-Algorithm-changing techniques such as quantization, approximate attention, skipped diffusion
-steps, speculative updates, or new early-exit policies are intentionally outside this contract.
+Quantization, skipped diffusion steps, approximate attention, speculative execution, or new
+early-exit policies are outside this contract.
 
-## Install
+## Build
 
-```bash
-pip install -e .
-```
+A C++20 compiler and PyTorch/LibTorch are required.
 
-For development:
+    pip install torch
+    pip install -e '.[dev]' --no-build-isolation
+    pytest
+    ruff check .
 
-```bash
-pip install -e '.[dev]'
-pytest
-ruff check .
-```
+The core can also be built and tested without the Python API:
+
+    cmake -S . -B build -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+    cmake --build build
+    ctest --test-dir build --output-on-failure
 
 ## Use
 
-```python
-import torch
-from cid_engine import CIDEngine
+    import torch
+    import cid_engine
 
-engine = CIDEngine("torch")
+    token_ids = torch.randint(0, 32000, (1, 128), device="cuda")
+    logits = torch.randn(1, 128, 32000, device="cuda", dtype=torch.bfloat16)
 
-token_ids = torch.randint(0, 32000, (1, 128), device="cuda")
-logits = torch.randn(1, 128, 32000, device="cuda", dtype=torch.bfloat16)
+    confidence, predicted, current_confidence = cid_engine.display_token_statistics(
+        token_ids,
+        logits,
+    )
 
-confidence, predicted, current_confidence = engine.display_token_statistics(
-    token_ids, logits
-)
-```
-
-Switch to `CIDEngine("reference")` for the semantic oracle or `CIDEngine("compile")` to use
-`torch.compile`.
+The underlying operator is also available directly through
+torch.ops.cid_engine.display_token_statistics. The Python reference module is retained only for semantic tests and benchmarks.
 
 ## Benchmark
 
-```bash
-cid-engine-bench --device cuda --batch 1 --tokens 128 --vocab 65536
-```
+    cid-engine-bench --device cuda --batch 1 --tokens 128 --vocab 65536
 
-The benchmark reports latency for the reference, eager optimized, and compiled paths and verifies
-their outputs before timing.
+The benchmark verifies C++/reference equivalence before reporting timing.
 
-## Direction
+Moving Python tensor expressions into C++ does not by itself guarantee a speedup. If C++ launches
+the same sequence of ATen kernels, device work is essentially unchanged. Establishing the native
+core first gives CID a stable place for fused CUDA, CPU, and Ascend implementations and for future
+scheduler and memory-planner logic.
 
-The next layers should be added only when they have a measured CID workload:
+## Roadmap
 
-1. fuse the extracted primitives with Triton/CUDA and Ascend kernels;
-2. move tensorization and diffusion-state transitions into a CID execution plan;
-3. add CID-aware buffer lifetime planning and stream scheduling;
-4. overlap model work with asynchronous tool/source execution;
-5. keep PyTorch as a reference/training frontend until replacing a layer has measured value.
+1. Replace the hottest composite C++ operators with fused CUDA kernels.
+2. Add native CPU kernels where they materially improve latency.
+3. Move diffusion-state transitions and TCT packing into an execution plan.
+4. Add CID-aware buffer lifetime and stream scheduling.
+5. Overlap model/device work with asynchronous tool/source execution.
+6. Add the Ascend backend behind the same C++ engine interface.
+7. Keep PyTorch as the training/reference frontend until replacing a layer has measured value.
 
-This repository is Apache-2.0 licensed, matching the main CID codebase.
+Apache-2.0, matching the main CID repository.

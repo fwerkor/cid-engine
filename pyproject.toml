@@ -1,11 +1,11 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=77", "wheel", "torch>=2.4"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "cid-engine"
-version = "0.1.0"
-description = "Semantics-preserving execution engine for Continuous Interaction Diffusion"
+version = "0.2.0"
+description = "C++20 execution engine for Continuous Interaction Diffusion"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -21,8 +21,8 @@ dev = [
 [project.scripts]
 cid-engine-bench = "cid_engine.benchmark:main"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/cid_engine"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
