@@ -11,7 +11,7 @@
 namespace cid::engine {
 namespace {
 
-constexpr int kThreads = 256;
+constexpr int kThreads = 1024;
 
 __device__ bool better_max(
     const float candidate_value,
