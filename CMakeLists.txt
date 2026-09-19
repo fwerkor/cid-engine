@@ -3,7 +3,7 @@ project(cid_engine LANGUAGES CXX)
 
 find_package(Torch REQUIRED)
 
-add_library(cid_engine_core STATIC csrc/ops.cpp)
+add_library(cid_engine_core STATIC csrc/ops.cpp csrc/refine.cpp)
 target_include_directories(cid_engine_core PUBLIC csrc/include)
 target_link_libraries(cid_engine_core PUBLIC "${TORCH_LIBRARIES}")
 target_compile_features(cid_engine_core PUBLIC cxx_std_20)

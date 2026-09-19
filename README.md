@@ -22,12 +22,13 @@ model and for semantic-reference tests; it is not the execution core.
               +---- CUDA       (fused display-statistics kernel)
               +---- Ascend     (planned)
 
-The current C++ core owns four CID-specific primitives:
+The current C++ core owns CID-specific tensor primitives and the post-statistics display refinement policy:
 
 - live thought-slot occupancy with retired-slot masking;
 - deterministic first-free prefix allocation;
 - thought diffusion corruption from a supplied epsilon tensor;
-- display-token confidence/prediction statistics.
+- display-token confidence/prediction statistics;
+- C++ reveal/revision/EOS/structural-edit policy from those statistics.
 
 They are registered as torch.ops.cid_engine C++ operators, so tensors cross the Python/C++
 boundary without NumPy copies. The pure-Python implementation remains only as a semantic oracle.
@@ -90,8 +91,8 @@ scheduler and memory-planner logic.
 
 ## Roadmap
 
-1. Expand fused CUDA coverage beyond display-token statistics.
-2. Add native CPU kernels where they materially improve latency.
+1. Profile and native-accelerate materialization/TCT state transitions.
+2. Expand fused CUDA coverage beyond display-token statistics.
 3. Move diffusion-state transitions and TCT packing into an execution plan.
 4. Add CID-aware buffer lifetime and stream scheduling.
 5. Overlap model/device work with asynchronous tool/source execution.

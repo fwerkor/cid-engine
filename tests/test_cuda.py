@@ -45,3 +45,26 @@ def test_cuda_argmax_keeps_first_tie() -> None:
     _, predicted, _ = cid_engine.display_token_statistics(token_ids, logits)
 
     assert predicted.item() == 1
+
+
+def test_cuda_statistics_and_native_refinement_preserve_structural_insertion() -> None:
+    token_ids = torch.tensor([[9, 10, 11, 12, 13, 14, 2, 5, 5]], device="cuda")
+    logits = torch.full((1, 9, 16), -20.0, device="cuda")
+    proposal = [9, 10, 7, 11, 12, 13, 0, 0, 0]
+    for position, token in enumerate(proposal):
+        logits[0, position, token] = 20.0
+
+    confidence, predicted, current = cid_engine.display_token_statistics(token_ids, logits)
+    refined = cid_engine.refine_display_from_statistics(
+        token_ids,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=5,
+        eos_token_id=2,
+        reveal_fraction=1.0,
+        revision_fraction=1.0,
+        revision_margin=0.0,
+    )
+
+    assert refined.tolist() == [[9, 10, 7, 11, 12, 13, 14, 2, 5]]

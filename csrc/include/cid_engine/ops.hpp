@@ -29,4 +29,15 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& logits);
 
+at::Tensor refine_display_from_statistics(
+    const at::Tensor& token_ids,
+    const at::Tensor& confidence,
+    const at::Tensor& predicted,
+    const at::Tensor& current_confidence,
+    std::int64_t mask_token_id,
+    const std::optional<std::int64_t>& eos_token_id,
+    double reveal_fraction,
+    double revision_fraction,
+    double revision_margin);
+
 }  // namespace cid::engine

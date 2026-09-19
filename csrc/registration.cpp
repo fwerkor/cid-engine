@@ -15,6 +15,11 @@ TORCH_LIBRARY(cid_engine, m) {
   m.def(
       "display_token_statistics(Tensor token_ids, Tensor logits) "
       "-> (Tensor, Tensor, Tensor)");
+  m.def(
+      "refine_display_from_statistics(Tensor token_ids, Tensor confidence, "
+      "Tensor predicted, Tensor current_confidence, int mask_token_id, "
+      "int? eos_token_id, float reveal_fraction, float revision_fraction, "
+      "float revision_margin) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
@@ -26,4 +31,7 @@ TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
   m.impl(
       "display_token_statistics",
       TORCH_FN(cid::engine::display_token_statistics));
+  m.impl(
+      "refine_display_from_statistics",
+      TORCH_FN(cid::engine::refine_display_from_statistics));
 }

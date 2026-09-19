@@ -118,4 +118,5 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
   return {confidence, predicted, current_confidence};
 }
 
+
 }  // namespace cid::engine

@@ -11,6 +11,7 @@ with_cuda = torch.version.cuda is not None and CUDA_HOME is not None
 
 sources = [
     "csrc/ops.cpp",
+    "csrc/refine.cpp",
     "csrc/registration.cpp",
     "csrc/bindings.cpp",
 ]

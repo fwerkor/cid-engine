@@ -24,3 +24,20 @@ The reference is the equivalent PyTorch softmax/max/gather computation.
 | 256 | 1.567 ms | 0.449 ms | 3.49x |
 
 These are kernel-level measurements, not end-to-end CID latency.
+
+
+## Native full-refinement policy
+
+With the C++ post-statistics policy enabled, the same A6000 / BF16 / 155136-vocabulary
+microbenchmark measured the complete CIDDiffusionScheduler.refine_display path at 64 display
+slots. Median latency over alternating reference/native runs was:
+
+| Scenario | PyTorch policy | cid-engine | Speedup |
+| --- | ---: | ---: | ---: |
+| all masked, no revision | 0.660 ms | 0.182 ms | 3.62x |
+| EOS at 16, no revision | 0.684 ms | 0.179 ms | 3.83x |
+| EOS at 16, revision=1 | 1.044 ms | 0.178 ms | 5.86x |
+| EOS at 48, revision=1 | 1.523 ms | 0.181 ms | 8.41x |
+
+The GPU was shared, so occasional contention outliers were excluded by reporting medians. These
+remain runtime microbenchmarks rather than end-to-end model-generation speedups.

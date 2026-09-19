@@ -116,3 +116,105 @@ def test_native_ops_are_registered() -> None:
 
 def test_cuda_build_flag_is_boolean() -> None:
     assert isinstance(cid_engine.CUDA_BACKEND_BUILT, bool)
+
+
+def _statistics_from_logits(
+    token_ids: torch.Tensor,
+    logits: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    return reference.display_token_statistics(token_ids, logits)
+
+
+def test_native_refinement_reveals_and_revises() -> None:
+    tokens = torch.tensor([[5, 9, 10, 11]])
+    logits = torch.zeros(1, 4, 16)
+    logits[0, 0, 5] = 20.0
+    logits[0, 0, 7] = 10.0
+    logits[0, 1, 12] = 10.0
+    logits[0, 2, 10] = 10.0
+    logits[0, 3, 13] = 9.0
+    confidence, predicted, current = _statistics_from_logits(tokens, logits)
+
+    refined = cid_engine.refine_display_from_statistics(
+        tokens,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=5,
+        eos_token_id=None,
+        reveal_fraction=1.0,
+        revision_fraction=0.5,
+        revision_margin=0.1,
+    )
+
+    assert refined.tolist() == [[5, 12, 10, 13]]
+
+
+def test_native_refinement_expands_existing_eos() -> None:
+    tokens = torch.tensor([[9, 2, 5, 5]])
+    logits = torch.zeros(1, 4, 16)
+    logits[0, 0, 9] = 30.0
+    logits[0, 1, 7] = 30.0
+    logits[0, 2, 8] = 30.0
+    logits[0, 3, 2] = 30.0
+    confidence, predicted, current = _statistics_from_logits(tokens, logits)
+
+    refined = cid_engine.refine_display_from_statistics(
+        tokens,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=5,
+        eos_token_id=2,
+        reveal_fraction=1.0,
+        revision_fraction=1.0,
+        revision_margin=0.0,
+    )
+
+    assert refined.tolist() == [[9, 7, 8, 2]]
+
+
+def test_native_refinement_splices_middle_insertion() -> None:
+    tokens = torch.tensor([[9, 10, 11, 12, 13, 14, 2, 5, 5]])
+    logits = torch.full((1, 9, 16), -20.0)
+    proposal = [9, 10, 7, 11, 12, 13, 0, 0, 0]
+    for position, token in enumerate(proposal):
+        logits[0, position, token] = 20.0
+    confidence, predicted, current = _statistics_from_logits(tokens, logits)
+
+    refined = cid_engine.refine_display_from_statistics(
+        tokens,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=5,
+        eos_token_id=2,
+        reveal_fraction=1.0,
+        revision_fraction=1.0,
+        revision_margin=0.0,
+    )
+
+    assert refined.tolist() == [[9, 10, 7, 11, 12, 13, 14, 2, 5]]
+
+
+def test_native_refinement_splices_middle_deletion() -> None:
+    tokens = torch.tensor([[9, 10, 7, 11, 12, 13, 14, 2, 5]])
+    logits = torch.full((1, 9, 16), -20.0)
+    proposal = [9, 10, 11, 12, 13, 0, 0, 0, 0]
+    for position, token in enumerate(proposal):
+        logits[0, position, token] = 20.0
+    confidence, predicted, current = _statistics_from_logits(tokens, logits)
+
+    refined = cid_engine.refine_display_from_statistics(
+        tokens,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=5,
+        eos_token_id=2,
+        reveal_fraction=1.0,
+        revision_fraction=1.0,
+        revision_margin=0.0,
+    )
+
+    assert refined.tolist() == [[9, 10, 11, 12, 13, 14, 2, 5, 5]]
