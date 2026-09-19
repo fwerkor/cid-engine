@@ -34,7 +34,7 @@ jobs:
 
       - name: Install build tooling
         run: |
-          python -m pip install --upgrade build twine
+          python -m pip install --upgrade build twine wheel
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Build source distribution
