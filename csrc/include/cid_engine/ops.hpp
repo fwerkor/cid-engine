@@ -19,6 +19,10 @@ at::Tensor prefix_allocation_mask(
     double threshold,
     std::int64_t max_allocations);
 
+at::Tensor batched_linear_assignment(
+    const at::Tensor& costs,
+    const at::Tensor& row_counts);
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
     const at::Tensor& semantic,
     const at::Tensor& timesteps,

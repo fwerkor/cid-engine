@@ -10,6 +10,8 @@ TORCH_LIBRARY(cid_engine, m) {
       "prefix_allocation_mask(Tensor occupancy, Tensor allocation_logits, "
       "float threshold, int max_allocations) -> Tensor");
   m.def(
+      "batched_linear_assignment(Tensor costs, Tensor row_counts) -> Tensor");
+  m.def(
       "thought_corrupt_from_epsilon(Tensor semantic, Tensor timesteps, "
       "Tensor occupancy, Tensor epsilon) -> (Tensor, Tensor, Tensor)");
   m.def(
@@ -29,6 +31,9 @@ TORCH_LIBRARY(cid_engine, m) {
 TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
   m.impl("live_slot_occupancy", TORCH_FN(cid::engine::live_slot_occupancy));
   m.impl("prefix_allocation_mask", TORCH_FN(cid::engine::prefix_allocation_mask));
+  m.impl(
+      "batched_linear_assignment",
+      TORCH_FN(cid::engine::batched_linear_assignment));
   m.impl(
       "thought_corrupt_from_epsilon",
       TORCH_FN(cid::engine::thought_corrupt_from_epsilon));

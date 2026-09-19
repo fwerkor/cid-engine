@@ -58,6 +58,13 @@ def display_token_statistics(
     return torch.ops.cid_engine.display_token_statistics(token_ids, logits)
 
 
+def batched_linear_assignment(
+    costs: Tensor,
+    row_counts: Tensor,
+) -> Tensor:
+    return torch.ops.cid_engine.batched_linear_assignment(costs, row_counts)
+
+
 def materialize_cell_snapshot(
     thought_semantic: Tensor,
     role_logits: Tensor,
@@ -105,6 +112,7 @@ def refine_display_from_statistics(
 
 __all__ = [
     "CUDA_BACKEND_BUILT",
+    "batched_linear_assignment",
     "display_token_statistics",
     "live_slot_occupancy",
     "materialize_cell_snapshot",

@@ -208,3 +208,39 @@ def test_cuda_materialize_cell_snapshot_matches_reference(
     )
 
     torch.testing.assert_close(actual, expected, rtol=2e-5, atol=2e-6)
+
+
+@pytest.mark.parametrize("columns", [4, 8])
+def test_cuda_batched_linear_assignment_matches_reference(columns: int) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(1417 + columns)
+    costs = torch.randn(
+        128,
+        columns,
+        columns,
+        device="cuda",
+        dtype=torch.float32,
+        generator=generator,
+    )
+    row_counts = torch.randint(
+        0,
+        columns + 1,
+        (128,),
+        device="cuda",
+        dtype=torch.long,
+        generator=generator,
+    )
+
+    expected = reference.batched_linear_assignment(costs, row_counts)
+    actual = cid_engine.batched_linear_assignment(costs, row_counts)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_cuda_batched_linear_assignment_keeps_first_tie() -> None:
+    costs = torch.zeros(2, 8, 8, device="cuda")
+    row_counts = torch.tensor([4, 8], device="cuda", dtype=torch.long)
+
+    actual = cid_engine.batched_linear_assignment(costs, row_counts)
+
+    assert actual[0, :4].tolist() == [0, 1, 2, 3]
+    assert actual[1].tolist() == list(range(8))

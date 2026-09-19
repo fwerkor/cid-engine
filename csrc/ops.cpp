@@ -2,6 +2,8 @@
 
 #include <ATen/Functions.h>
 
+#include <limits>
+
 namespace cid::engine {
 
 at::Tensor live_slot_occupancy(
@@ -57,6 +59,116 @@ at::Tensor prefix_allocation_mask(
   auto selected = free.logical_and(eligible).logical_and(blocked.logical_not());
   auto allocation_rank = selected.cumsum(1);
   return selected.logical_and(allocation_rank.le(max_allocations));
+}
+
+
+at::Tensor batched_linear_assignment(
+    const at::Tensor& costs_input,
+    const at::Tensor& row_counts_input) {
+  TORCH_CHECK(costs_input.dim() == 3, "costs must have shape [batch, rows, columns]");
+  TORCH_CHECK(costs_input.is_floating_point(), "costs must use a floating dtype");
+  TORCH_CHECK(
+      costs_input.size(1) <= costs_input.size(2),
+      "assignment rows cannot exceed columns");
+  TORCH_CHECK(
+      costs_input.size(2) <= 16,
+      "batched_linear_assignment supports at most 16 columns");
+  TORCH_CHECK(
+      row_counts_input.dim() == 1 &&
+          row_counts_input.size(0) == costs_input.size(0),
+      "row_counts must have shape [batch]");
+  TORCH_CHECK(
+      row_counts_input.scalar_type() == at::kLong,
+      "row_counts must use torch.int64");
+
+  const auto original_device = costs_input.device();
+  auto costs = costs_input.detach().to(at::kCPU, at::kFloat).contiguous();
+  auto row_counts = row_counts_input.detach().to(at::kCPU, at::kLong).contiguous();
+  const auto batch = costs.size(0);
+  const auto rows = costs.size(1);
+  const auto columns = costs.size(2);
+  auto output = at::full(
+      {batch, rows},
+      -1,
+      at::TensorOptions().dtype(at::kLong).device(at::kCPU));
+
+  const auto* cost_ptr = costs.const_data_ptr<float>();
+  const auto* count_ptr = row_counts.const_data_ptr<std::int64_t>();
+  auto* output_ptr = output.mutable_data_ptr<std::int64_t>();
+
+  for (std::int64_t batch_index = 0; batch_index < batch; ++batch_index) {
+    const auto active_rows = count_ptr[batch_index];
+    TORCH_CHECK(
+        active_rows >= 0 && active_rows <= rows,
+        "row_counts values must be in [0, rows]");
+    if (active_rows == 0) {
+      continue;
+    }
+
+    double u[17] = {};
+    double v[17] = {};
+    std::int64_t p[17] = {};
+    std::int64_t way[17] = {};
+    const auto batch_offset = batch_index * rows * columns;
+
+    for (std::int64_t row = 1; row <= active_rows; ++row) {
+      p[0] = row;
+      std::int64_t column0 = 0;
+      double minimum[17];
+      bool used[17] = {};
+      for (std::int64_t column = 0; column <= columns; ++column) {
+        minimum[column] = std::numeric_limits<double>::infinity();
+      }
+
+      do {
+        used[column0] = true;
+        const auto row0 = p[column0];
+        double delta = std::numeric_limits<double>::infinity();
+        std::int64_t column1 = 0;
+        for (std::int64_t column = 1; column <= columns; ++column) {
+          if (used[column]) {
+            continue;
+          }
+          const auto cost_index =
+              batch_offset + (row0 - 1) * columns + (column - 1);
+          const double current =
+              static_cast<double>(cost_ptr[cost_index]) - u[row0] - v[column];
+          if (current < minimum[column]) {
+            minimum[column] = current;
+            way[column] = column0;
+          }
+          if (minimum[column] < delta) {
+            delta = minimum[column];
+            column1 = column;
+          }
+        }
+
+        for (std::int64_t column = 0; column <= columns; ++column) {
+          if (used[column]) {
+            u[p[column]] += delta;
+            v[column] -= delta;
+          } else {
+            minimum[column] -= delta;
+          }
+        }
+        column0 = column1;
+      } while (p[column0] != 0);
+
+      do {
+        const auto column1 = way[column0];
+        p[column0] = p[column1];
+        column0 = column1;
+      } while (column0 != 0);
+    }
+
+    for (std::int64_t column = 1; column <= columns; ++column) {
+      if (p[column] > 0 && p[column] <= active_rows) {
+        output_ptr[batch_index * rows + (p[column] - 1)] = column - 1;
+      }
+    }
+  }
+
+  return original_device.is_cpu() ? output : output.to(original_device);
 }
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(

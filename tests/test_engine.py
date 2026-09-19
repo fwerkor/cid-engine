@@ -272,3 +272,29 @@ def test_materialize_cell_snapshot_matches_reference() -> None:
     )
 
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_batched_linear_assignment_matches_reference() -> None:
+    costs = torch.tensor(
+        [
+            [
+                [4.0, 1.0, 3.0, 8.0],
+                [2.0, 0.0, 5.0, 7.0],
+                [3.0, 2.0, 2.0, 6.0],
+                [9.0, 9.0, 9.0, 9.0],
+            ],
+            [
+                [1.0, 1.0, 2.0, 3.0],
+                [1.0, 1.0, 2.0, 3.0],
+                [2.0, 2.0, 0.0, 0.0],
+                [4.0, 3.0, 2.0, 1.0],
+            ],
+        ],
+        dtype=torch.float32,
+    )
+    row_counts = torch.tensor([3, 4], dtype=torch.long)
+
+    expected = reference.batched_linear_assignment(costs, row_counts)
+    actual = cid_engine.batched_linear_assignment(costs, row_counts)
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)

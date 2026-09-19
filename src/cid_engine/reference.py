@@ -39,6 +39,78 @@ def prefix_allocation_mask(
     return selected & (allocation_rank <= max_allocations)
 
 
+
+def batched_linear_assignment(costs: Tensor, row_counts: Tensor) -> Tensor:
+    if costs.ndim != 3:
+        raise ValueError("costs must have shape [batch, rows, columns]")
+    batch, rows, columns = costs.shape
+    if rows > columns:
+        raise ValueError("assignment rows cannot exceed columns")
+    if row_counts.shape != (batch,):
+        raise ValueError("row_counts must have shape [batch]")
+
+    matrices = costs.detach().float().cpu().tolist()
+    counts = row_counts.detach().long().cpu().tolist()
+    result = torch.full(
+        (batch, rows),
+        -1,
+        dtype=torch.long,
+        device=costs.device,
+    )
+    assignments: list[list[int]] = []
+    for matrix, active_rows in zip(matrices, counts, strict=True):
+        if not 0 <= active_rows <= rows:
+            raise ValueError("row_counts values must be in [0, rows]")
+        u = [0.0] * (active_rows + 1)
+        v = [0.0] * (columns + 1)
+        p = [0] * (columns + 1)
+        way = [0] * (columns + 1)
+        for row in range(1, active_rows + 1):
+            p[0] = row
+            column0 = 0
+            minimum = [float("inf")] * (columns + 1)
+            used = [False] * (columns + 1)
+            while True:
+                used[column0] = True
+                row0 = p[column0]
+                delta = float("inf")
+                column1 = 0
+                for column in range(1, columns + 1):
+                    if used[column]:
+                        continue
+                    current = matrix[row0 - 1][column - 1] - u[row0] - v[column]
+                    if current < minimum[column]:
+                        minimum[column] = current
+                        way[column] = column0
+                    if minimum[column] < delta:
+                        delta = minimum[column]
+                        column1 = column
+                for column in range(columns + 1):
+                    if used[column]:
+                        u[p[column]] += delta
+                        v[column] -= delta
+                    else:
+                        minimum[column] -= delta
+                column0 = column1
+                if p[column0] == 0:
+                    break
+            while True:
+                column1 = way[column0]
+                p[column0] = p[column1]
+                column0 = column1
+                if column0 == 0:
+                    break
+
+        assignment = [-1] * rows
+        for column in range(1, columns + 1):
+            if 0 < p[column] <= active_rows:
+                assignment[p[column] - 1] = column - 1
+        assignments.append(assignment)
+
+    if assignments:
+        return torch.tensor(assignments, dtype=torch.long, device=costs.device)
+    return result
+
 def thought_corrupt_from_epsilon(
     semantic: Tensor,
     timesteps: Tensor,
