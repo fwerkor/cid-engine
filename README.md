@@ -5,6 +5,22 @@ cid-engine is the native execution engine for Continuous Interaction Diffusion (
 The engine core is written in C++20. Python is a thin integration surface for the current CID
 model and for semantic-reference tests; it is not the execution core.
 
+## Install
+
+PyPI releases can be installed with:
+
+    pip install cid-engine
+
+The current PyPI distribution is source-based so that installation can select the correct native
+backend for the target machine. A C++20 compiler is required. If the installed PyTorch build has
+CUDA support and `CUDA_HOME` points to a CUDA toolkit, the CUDA backend is built automatically;
+otherwise cid-engine builds its CPU backend.
+
+For an environment that already pins a particular PyTorch build, install against that exact local
+PyTorch ABI with:
+
+    pip install cid-engine --no-build-isolation
+
 ## Architecture
 
     CID Python/model frontend

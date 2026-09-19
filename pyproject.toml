@@ -4,19 +4,40 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cid-engine"
-version = "0.4.0"
+version = "0.4.1"
 description = "C++20 execution engine for Continuous Interaction Diffusion"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 authors = [{ name = "fwerkor" }]
 dependencies = ["torch>=2.4"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: C++",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/fwerkor/cid-engine"
+Repository = "https://github.com/fwerkor/cid-engine"
+Issues = "https://github.com/fwerkor/cid-engine/issues"
 
 [project.optional-dependencies]
 dev = [
   "hypothesis>=6.112",
   "pytest>=8",
   "ruff>=0.8",
+]
+release = [
+  "build>=1.2",
+  "twine>=6",
 ]
 
 [project.scripts]
