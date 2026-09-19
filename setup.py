@@ -20,6 +20,7 @@ if with_cuda:
         [
             "csrc/cuda/display_stats.cu",
             "csrc/cuda/prefix_allocation.cu",
+            "csrc/cuda/materialize_snapshot.cu",
         ]
     )
 

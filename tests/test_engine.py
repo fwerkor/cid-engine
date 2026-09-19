@@ -240,3 +240,35 @@ def test_native_refinement_splices_middle_deletion() -> None:
     )
 
     assert refined.tolist() == [[9, 10, 11, 12, 13, 14, 2, 5, 5]]
+
+
+def test_materialize_cell_snapshot_matches_reference() -> None:
+    generator = torch.Generator().manual_seed(31)
+    semantic = torch.randn(2, 5, 17, generator=generator)
+    roles = torch.randn(2, 5, 6, generator=generator)
+    uncertainty = torch.rand(2, 5, 1, generator=generator)
+    noise_delta = torch.randn(2, 5, 1, generator=generator)
+    lifecycle = torch.randn(2, 5, 4, generator=generator)
+    selected = torch.rand(2, 5, generator=generator) > 0.5
+    indices = torch.tensor([0, 3, 8, 16], dtype=torch.long)
+
+    expected = reference.materialize_cell_snapshot(
+        semantic,
+        roles,
+        uncertainty,
+        noise_delta,
+        lifecycle,
+        selected,
+        indices,
+    )
+    actual = cid_engine.materialize_cell_snapshot(
+        semantic,
+        roles,
+        uncertainty,
+        noise_delta,
+        lifecycle,
+        selected,
+        indices,
+    )
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)

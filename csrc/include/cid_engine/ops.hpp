@@ -40,4 +40,13 @@ at::Tensor refine_display_from_statistics(
     double revision_fraction,
     double revision_margin);
 
+at::Tensor materialize_cell_snapshot(
+    const at::Tensor& thought_semantic,
+    const at::Tensor& role_logits,
+    const at::Tensor& uncertainty,
+    const at::Tensor& noise_delta,
+    const at::Tensor& lifecycle_logits,
+    const at::Tensor& selected,
+    const at::Tensor& semantic_indices);
+
 }  // namespace cid::engine

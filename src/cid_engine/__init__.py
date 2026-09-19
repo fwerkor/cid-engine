@@ -5,7 +5,7 @@ from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 
 
@@ -58,6 +58,26 @@ def display_token_statistics(
     return torch.ops.cid_engine.display_token_statistics(token_ids, logits)
 
 
+def materialize_cell_snapshot(
+    thought_semantic: Tensor,
+    role_logits: Tensor,
+    uncertainty: Tensor,
+    noise_delta: Tensor,
+    lifecycle_logits: Tensor,
+    selected: Tensor,
+    semantic_indices: Tensor,
+) -> Tensor:
+    return torch.ops.cid_engine.materialize_cell_snapshot(
+        thought_semantic,
+        role_logits,
+        uncertainty,
+        noise_delta,
+        lifecycle_logits,
+        selected,
+        semantic_indices,
+    )
+
+
 def refine_display_from_statistics(
     token_ids: Tensor,
     confidence: Tensor,
@@ -87,6 +107,7 @@ __all__ = [
     "CUDA_BACKEND_BUILT",
     "display_token_statistics",
     "live_slot_occupancy",
+    "materialize_cell_snapshot",
     "prefix_allocation_mask",
     "refine_display_from_statistics",
     "thought_corrupt_from_epsilon",

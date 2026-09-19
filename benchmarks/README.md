@@ -57,3 +57,26 @@ PyTorch CID allocation policy, including FP32 sigmoid thresholding and first-fre
 
 A 3000-case threshold-boundary differential test passed across FP32/BF16, batch sizes 1/3/8, and
 thresholds from 0 to 1. Allocation masks were exactly equal to the reference.
+
+
+## Fused materialization snapshot
+
+The v0.4 native snapshot packs allocation selection, lifecycle argmax, uncertainty, noise delta,
+role probabilities, and a compact semantic sketch into one FP32 tensor. CID copies that compact
+tensor to the host once instead of synchronizing each field independently.
+
+Measured on the shared RTX A6000 at 128 thought slots and 4096 semantic dimensions (BF16):
+
+| Operation | Existing multi-sync path | Native snapshot | Speedup |
+| --- | ---: | ---: | ---: |
+| Snapshot construction + host transfer | 0.126 ms | 0.021 ms | 5.9x |
+
+FP16, BF16, and FP32 outputs matched the PyTorch reference within the operator's floating-point
+tolerance. This benchmark isolates snapshot construction and transfer; it does not include Python
+CognitiveField reconstruction.
+
+In the main CID runtime, combining the snapshot with device-resident semantic vectors removed the
+large semantic GPU-to-CPU-to-GPU round trip. On the same shared A6000, a synthetic 128x4096 TCT
+step fell from roughly 33 ms for materialize+retensorize to roughly 7 ms at the observed median.
+The shared GPU has a periodic background workload, so this round-trip result is reported only as a
+runtime microbenchmark rather than an end-to-end generation claim. Quiet samples were lower.

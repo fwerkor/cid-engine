@@ -173,3 +173,38 @@ def test_cuda_prefix_allocation_uses_tensor_device_not_current_device() -> None:
     assert actual.device == device
     assert torch.cuda.current_device() == current_device
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
+def test_cuda_materialize_cell_snapshot_matches_reference(
+    dtype: torch.dtype,
+) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(902)
+    semantic = torch.randn(2, 128, 257, device="cuda", dtype=dtype, generator=generator)
+    roles = torch.randn(2, 128, 6, device="cuda", dtype=dtype, generator=generator)
+    uncertainty = torch.rand(2, 128, 1, device="cuda", dtype=dtype, generator=generator)
+    noise_delta = torch.randn(2, 128, 1, device="cuda", dtype=dtype, generator=generator)
+    lifecycle = torch.randn(2, 128, 4, device="cuda", dtype=dtype, generator=generator)
+    selected = torch.rand(2, 128, device="cuda", generator=generator) > 0.5
+    indices = torch.tensor([0, 23, 47, 70, 93, 117, 140, 163, 187, 210, 233, 256], device="cuda")
+
+    expected = reference.materialize_cell_snapshot(
+        semantic,
+        roles,
+        uncertainty,
+        noise_delta,
+        lifecycle,
+        selected,
+        indices,
+    )
+    actual = cid_engine.materialize_cell_snapshot(
+        semantic,
+        roles,
+        uncertainty,
+        noise_delta,
+        lifecycle,
+        selected,
+        indices,
+    )
+
+    torch.testing.assert_close(actual, expected, rtol=2e-5, atol=2e-6)

@@ -19,7 +19,7 @@ model and for semantic-reference tests; it is not the execution core.
     +-----------------------+
               |
               +---- CPU
-              +---- CUDA       (fused display-statistics and prefix-allocation kernels)
+              +---- CUDA       (display, allocation, and materialization kernels)
               +---- Ascend     (planned)
 
 The current C++ core owns CID-specific tensor primitives and the post-statistics display refinement policy:
@@ -28,7 +28,8 @@ The current C++ core owns CID-specific tensor primitives and the post-statistics
 - deterministic first-free prefix allocation;
 - thought diffusion corruption from a supplied epsilon tensor;
 - display-token confidence/prediction statistics;
-- C++ reveal/revision/EOS/structural-edit policy from those statistics.
+- C++ reveal/revision/EOS/structural-edit policy from those statistics;
+- compact materialization snapshots for one-transfer TCT control-state decoding.
 
 They are registered as torch.ops.cid_engine C++ operators, so tensors cross the Python/C++
 boundary without NumPy copies. The pure-Python implementation remains only as a semantic oracle.
@@ -115,9 +116,9 @@ scheduler and memory-planner logic.
 
 ## Roadmap
 
-1. Profile and native-accelerate materialization/TCT state transitions.
-2. Expand fused CUDA coverage across the remaining CID primitives.
-3. Move diffusion-state transitions and TCT packing into an execution plan.
+1. Keep model-visible TCT numeric state device-resident across CID steps.
+2. Move the remaining materialization/control-state transitions into native state.
+3. Expand fused CUDA coverage only where profiling shows a material gain.
 4. Add CID-aware buffer lifetime and stream scheduling.
 5. Overlap model/device work with asynchronous tool/source execution.
 6. Add the Ascend backend behind the same C++ engine interface.

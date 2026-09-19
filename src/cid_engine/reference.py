@@ -56,6 +56,35 @@ def thought_corrupt_from_epsilon(
     return corrupted, local_noise, masked_epsilon
 
 
+def materialize_cell_snapshot(
+    thought_semantic: Tensor,
+    role_logits: Tensor,
+    uncertainty: Tensor,
+    noise_delta: Tensor,
+    lifecycle_logits: Tensor,
+    selected: Tensor,
+    semantic_indices: Tensor,
+) -> Tensor:
+    selected_f32 = selected.float().unsqueeze(-1)
+    lifecycle = lifecycle_logits.float().argmax(dim=-1, keepdim=True).float()
+    roles = torch.sigmoid(role_logits.float())
+    semantic = thought_semantic.float().index_select(
+        -1,
+        semantic_indices.to(device=thought_semantic.device),
+    )
+    return torch.cat(
+        (
+            selected_f32,
+            lifecycle,
+            uncertainty.float(),
+            noise_delta.float(),
+            roles,
+            semantic,
+        ),
+        dim=-1,
+    )
+
+
 def display_token_statistics(
     token_ids: Tensor,
     logits: Tensor,
