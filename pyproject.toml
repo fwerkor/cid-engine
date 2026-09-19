@@ -14,6 +14,7 @@ dependencies = ["torch>=2.4"]
 
 [project.optional-dependencies]
 dev = [
+  "hypothesis>=6.112",
   "pytest>=8",
   "ruff>=0.8",
 ]
@@ -27,6 +28,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "fuzz: structured property-based and differential fuzz tests",
+  "precision: numerical precision and decision-boundary conformance tests",
+]
 
 [tool.ruff]
 target-version = "py310"

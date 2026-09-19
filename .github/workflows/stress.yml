@@ -1,0 +1,73 @@
+name: Stress
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  differential-and-precision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CID_ENGINE_FUZZ_EXAMPLES: "5000"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: python -m pip install -e '.[dev]' --no-build-isolation
+      - name: High-intensity differential fuzzing
+        run: pytest -q tests/test_fuzz.py --hypothesis-show-statistics
+      - name: Numerical precision sweep
+        run: pytest -q tests/test_precision.py
+
+  native-libfuzzer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install Clang sanitizer runtimes
+        run: sudo apt-get update && sudo apt-get install -y clang libclang-rt-dev
+      - name: Build libFuzzer target with ASan and UBSan
+        env:
+          CC: clang
+          CXX: clang++
+        run: |
+          cmake -S . -B build-fuzz \
+            -DCID_ENGINE_BUILD_TESTS=OFF \
+            -DCID_ENGINE_BUILD_FUZZERS=ON \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+          cmake --build build-fuzz --parallel 2
+      - name: Coverage-guided native fuzzing
+        env:
+          ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+          OMP_NUM_THREADS: "1"
+          MKL_NUM_THREADS: "1"
+        run: |
+          cp -a tests/fuzz/corpus fuzz-corpus
+          mkdir -p fuzz-artifacts
+          ./build-fuzz/cid_engine_fuzz fuzz-corpus \
+            -max_total_time=300 \
+            -timeout=10 \
+            -rss_limit_mb=6000 \
+            -print_final_stats=1 \
+            -artifact_prefix=fuzz-artifacts/
+      - name: Preserve crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cid-engine-fuzz-crashes
+          path: fuzz-artifacts/
+          if-no-files-found: ignore

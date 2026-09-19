@@ -2,9 +2,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.hypothesis/
 .ruff_cache/
 .venv/
 dist/
 build/
+build-fuzz/
 benchmark-results/
 *.so

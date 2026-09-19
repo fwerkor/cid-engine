@@ -350,9 +350,14 @@ at::Tensor refine_display_from_statistics(
         }
       }
       std::vector<std::int64_t> candidates;
+      // This branch mirrors a torch.float32 tensor comparison in the Python
+      // runtime, so the scalar margin is quantized to float32 before the
+      // comparison.  Structural-edit and EOS branches compare Python floats
+      // and intentionally keep the original double-valued margin.
+      const auto tensor_revision_margin = static_cast<float>(revision_margin);
       for (const auto position : visible_positions) {
         if (row_predicted[position] != row_tokens[position] &&
-            gains[position] >= revision_margin) {
+            gains[position] >= tensor_revision_margin) {
           candidates.push_back(position);
         }
       }

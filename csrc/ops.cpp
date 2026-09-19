@@ -109,12 +109,17 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
   auto max_result = logits_f32.max(-1);
   auto max_logits = std::get<0>(max_result);
   auto predicted = std::get<1>(max_result);
-  auto normalizer = at::logsumexp(logits_f32, {-1});
-  auto confidence = at::exp(max_logits - normalizer);
+  // Normalize after subtracting the row maximum.  Keeping a large common logit
+  // offset out of logsumexp avoids catastrophic cancellation when the final
+  // confidence is reconstructed (for example logits near +1e4).
+  auto shifted_logits = logits_f32 - max_logits.unsqueeze(-1);
+  auto log_normalizer = at::logsumexp(shifted_logits, {-1});
+  auto confidence = at::exp(-log_normalizer);
   auto current_logits = logits_f32
                             .gather(-1, token_ids.unsqueeze(-1))
                             .squeeze(-1);
-  auto current_confidence = at::exp(current_logits - normalizer);
+  auto current_confidence =
+      at::exp(current_logits - max_logits - log_normalizer);
   return {confidence, predicted, current_confidence};
 }
 

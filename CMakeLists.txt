@@ -17,3 +17,26 @@ if(CID_ENGINE_BUILD_TESTS)
   target_compile_features(cid_engine_cpp_tests PRIVATE cxx_std_20)
   add_test(NAME cid_engine_cpp_tests COMMAND cid_engine_cpp_tests)
 endif()
+
+option(CID_ENGINE_BUILD_FUZZERS "Build coverage-guided libFuzzer targets" OFF)
+if(CID_ENGINE_BUILD_FUZZERS)
+  if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    message(FATAL_ERROR "CID_ENGINE_BUILD_FUZZERS requires Clang/libFuzzer")
+  endif()
+
+  target_compile_options(
+    cid_engine_core PRIVATE
+    -fsanitize=address,undefined
+    -fno-omit-frame-pointer
+  )
+
+  add_executable(cid_engine_fuzz tests/fuzz/fuzz_engine.cpp)
+  target_link_libraries(cid_engine_fuzz PRIVATE cid_engine_core)
+  target_compile_features(cid_engine_fuzz PRIVATE cxx_std_20)
+  target_compile_options(
+    cid_engine_fuzz PRIVATE
+    -fsanitize=fuzzer,address,undefined
+    -fno-omit-frame-pointer
+  )
+  target_link_options(cid_engine_fuzz PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()

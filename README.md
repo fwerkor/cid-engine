@@ -62,6 +62,30 @@ The core can also be built and tested without the Python API:
     cmake --build build
     ctest --test-dir build --output-on-failure
 
+## Verification
+
+`cid-engine` treats semantic and numerical equivalence as release requirements. The test stack has
+three complementary layers:
+
+- property-based differential fuzzing compares native operators with independent Python semantic
+  oracles across randomized shapes, dtypes, strides, thresholds, EOS layouts, and structural edits;
+- precision tests compare floating-point kernels with float64 oracles on adversarial logits,
+  near-ties, large offsets, diffusion boundary timesteps, and vocabulary sizes up to 65,537;
+- a Clang libFuzzer target drives the C++ core directly under AddressSanitizer and
+  UndefinedBehaviorSanitizer.
+
+The normal test suite uses a bounded fuzz budget. A scheduled stress workflow raises the Hypothesis
+budget substantially and runs the coverage-guided native fuzzer. The same native target can be run
+locally with Clang:
+
+    CXX=clang++ cmake -S . -B build-fuzz \
+      -DCID_ENGINE_BUILD_TESTS=OFF -DCID_ENGINE_BUILD_FUZZERS=ON \
+      -DCMAKE_PREFIX_PATH="$(python -c 'import torch; print(torch.utils.cmake_prefix_path)')"
+    cmake --build build-fuzz --parallel 2
+    cp -a tests/fuzz/corpus /tmp/cid-engine-fuzz-corpus
+    OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 ASAN_OPTIONS=detect_leaks=0 \
+      ./build-fuzz/cid_engine_fuzz /tmp/cid-engine-fuzz-corpus -max_total_time=60
+
 ## Use
 
     import torch

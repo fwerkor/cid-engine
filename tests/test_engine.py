@@ -150,6 +150,28 @@ def test_native_refinement_reveals_and_revises() -> None:
     assert refined.tolist() == [[5, 12, 10, 13]]
 
 
+def test_native_refinement_matches_float32_margin_quantization() -> None:
+    tokens = torch.tensor([[2]])
+    confidence = torch.tensor([[0.25]])
+    predicted = torch.tensor([[0]])
+    current = torch.tensor([[0.25]])
+
+    refined = cid_engine.refine_display_from_statistics(
+        tokens,
+        confidence,
+        predicted,
+        current,
+        mask_token_id=0,
+        eos_token_id=None,
+        reveal_fraction=0.0,
+        revision_fraction=1.0,
+        revision_margin=float.fromhex("0x0.0000000000001p-1022"),
+    )
+
+    # torch.float32 >= scalar quantizes this subnormal double margin to zero.
+    assert refined.tolist() == [[0]]
+
+
 def test_native_refinement_expands_existing_eos() -> None:
     tokens = torch.tensor([[9, 2, 5, 5]])
     logits = torch.zeros(1, 4, 16)

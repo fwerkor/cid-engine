@@ -8,6 +8,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      CID_ENGINE_FUZZ_EXAMPLES: "75"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
