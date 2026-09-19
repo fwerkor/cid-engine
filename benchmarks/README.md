@@ -41,3 +41,19 @@ slots. Median latency over alternating reference/native runs was:
 
 The GPU was shared, so occasional contention outliers were excluded by reporting medians. These
 remain runtime microbenchmarks rather than end-to-end model-generation speedups.
+
+
+## Fused prefix allocation
+
+Measured on the same RTX A6000 with 128 thought slots. The reference is the current vectorized
+PyTorch CID allocation policy, including FP32 sigmoid thresholding and first-free prefix semantics.
+
+| Logit dtype | Batch | PyTorch | Fused CUDA | Speedup |
+| --- | ---: | ---: | ---: | ---: |
+| FP32 | 1 | 0.079 ms | 0.006 ms | 13.04x |
+| FP32 | 8 | 0.072 ms | 0.007 ms | 11.02x |
+| BF16 | 1 | 0.094 ms | 0.007 ms | 13.17x |
+| BF16 | 8 | 0.083 ms | 0.007 ms | 11.51x |
+
+A 3000-case threshold-boundary differential test passed across FP32/BF16, batch sizes 1/3/8, and
+thresholds from 0 to 1. Allocation masks were exactly equal to the reference.

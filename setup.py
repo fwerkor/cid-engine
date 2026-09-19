@@ -16,7 +16,12 @@ sources = [
     "csrc/bindings.cpp",
 ]
 if with_cuda:
-    sources.append("csrc/cuda/display_stats.cu")
+    sources.extend(
+        [
+            "csrc/cuda/display_stats.cu",
+            "csrc/cuda/prefix_allocation.cu",
+        ]
+    )
 
 compile_args = {"cxx": ["-O3", "-std=c++20"]}
 if with_cuda:
