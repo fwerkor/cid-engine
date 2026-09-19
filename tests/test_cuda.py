@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pytest
 import torch
 
@@ -70,23 +72,37 @@ def test_cuda_statistics_and_native_refinement_preserve_structural_insertion() -
     assert refined.tolist() == [[9, 10, 7, 11, 12, 13, 14, 2, 5]]
 
 
-@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize(
+    "dtype",
+    [torch.float16, torch.bfloat16, torch.float32, torch.float64],
+)
 @pytest.mark.parametrize("batch_size", [1, 8])
+@pytest.mark.parametrize("rank3", [False, True])
 def test_cuda_prefix_allocation_matches_reference(
     dtype: torch.dtype,
     batch_size: int,
+    rank3: bool,
 ) -> None:
     generator = torch.Generator(device="cuda").manual_seed(812)
-    occupancy = (
-        torch.rand(batch_size, 128, 1, device="cuda", generator=generator) > 0.6
-    )
-    logits = torch.randn(
+    occupancy = torch.randint(
+        -1,
+        2,
+        (batch_size, 128),
+        device="cuda",
+        generator=generator,
+    ).float()
+    if rank3:
+        occupancy = occupancy.unsqueeze(-1)
+
+    logits_storage = torch.randn(
         batch_size,
-        128,
+        256,
         device="cuda",
         dtype=dtype,
         generator=generator,
     )
+    logits = logits_storage[:, ::2]
+    assert not logits.is_contiguous()
 
     expected = reference.prefix_allocation_mask(
         occupancy,
@@ -101,4 +117,59 @@ def test_cuda_prefix_allocation_matches_reference(
         max_allocations=4,
     )
 
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("threshold", [1.0e-6, 0.01, 0.5, 0.99, 1.0 - 1.0e-6])
+def test_cuda_prefix_allocation_matches_float32_threshold_boundaries(
+    threshold: float,
+) -> None:
+    boundary = math.log(threshold / (1.0 - threshold))
+    logits = torch.tensor(
+        [[
+            math.nextafter(boundary, -math.inf),
+            boundary,
+            math.nextafter(boundary, math.inf),
+            80.0,
+            -80.0,
+        ]],
+        dtype=torch.float64,
+        device="cuda",
+    )
+    occupancy = torch.zeros(1, logits.shape[1], device="cuda")
+
+    expected = reference.prefix_allocation_mask(
+        occupancy,
+        logits,
+        threshold,
+        logits.shape[1],
+    )
+    actual = cid_engine.prefix_allocation_mask(
+        occupancy,
+        logits,
+        threshold=threshold,
+        max_allocations=logits.shape[1],
+    )
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(torch.cuda.device_count() < 2, reason="requires two visible CUDA devices")
+def test_cuda_prefix_allocation_uses_tensor_device_not_current_device() -> None:
+    current_device = torch.cuda.current_device()
+    target_device = 1 if current_device == 0 else 0
+    device = torch.device(f"cuda:{target_device}")
+    occupancy = torch.tensor([[0.0, 0.0, 1.0, 0.0]], device=device)
+    logits = torch.tensor([[8.0, 7.0, -5.0, 6.0]], device=device)
+
+    expected = reference.prefix_allocation_mask(occupancy, logits, 0.5, 2)
+    actual = cid_engine.prefix_allocation_mask(
+        occupancy,
+        logits,
+        threshold=0.5,
+        max_allocations=2,
+    )
+
+    assert actual.device == device
+    assert torch.cuda.current_device() == current_device
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)

@@ -2,8 +2,10 @@
 
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/library.h>
 
+#include <cmath>
 #include <cstdint>
 
 namespace cid::engine {
@@ -93,6 +95,7 @@ at::Tensor prefix_allocation_mask_cuda(
   TORCH_CHECK(threshold >= 0.0 && threshold <= 1.0, "threshold must be in [0, 1]");
   TORCH_CHECK(max_allocations > 0, "max_allocations must be positive");
 
+  const c10::cuda::CUDAGuard device_guard(occupancy_input.device());
   auto occupancy =
       occupancy_input.dim() == 3 ? occupancy_input.squeeze(-1) : occupancy_input;
   TORCH_CHECK(
