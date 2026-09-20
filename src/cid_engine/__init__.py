@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
+from cid_engine.activation_offload import AsyncPinnedActivationOffloader
 from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
@@ -182,6 +183,7 @@ def refine_display_from_statistics(
 
 
 __all__ = [
+    "AsyncPinnedActivationOffloader",
     "AsyncPinnedGradientAccumulator",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
