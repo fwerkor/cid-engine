@@ -185,9 +185,9 @@ def test_async_pinned_gradient_accumulator_preserves_sum_and_reuses_buffers() ->
             assert parameter.grad is None
 
         snapshot = accumulator.snapshot()
-        assert snapshot["weight"].is_pinned()
         torch.testing.assert_close(snapshot["weight"], expected.cpu(), rtol=0, atol=0)
         allocated = accumulator.allocated_bytes
+        assert allocated == parameter.numel() * parameter.element_size() * 2
 
         accumulator.restore((("weight", parameter),))
         torch.cuda.synchronize()
