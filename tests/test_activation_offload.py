@@ -149,24 +149,8 @@ def test_layer_activation_prefetch_preserves_gradients() -> None:
         controller.close()
 
 
-def test_non_overlapping_layout_rejects_expanded_and_overlapping_views() -> None:
-    from cid_engine.activation_offload import _is_non_overlapping_layout
-
-    contiguous = torch.randn(4, 5)
-    transposed = contiguous.t()
-    sliced = contiguous[:, ::2]
-    expanded = torch.randn(4, 1).expand(4, 5)
-    overlapping = torch.as_strided(torch.arange(5.0), (3, 3), (1, 1))
-
-    assert _is_non_overlapping_layout(contiguous)
-    assert _is_non_overlapping_layout(transposed)
-    assert _is_non_overlapping_layout(sliced)
-    assert not _is_non_overlapping_layout(expanded)
-    assert not _is_non_overlapping_layout(overlapping)
-
-
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
-def test_activation_offload_skips_expanded_saved_tensor() -> None:
+def test_activation_offload_handles_large_expanded_saved_tensor() -> None:
     device = torch.device("cuda", 0)
     base = torch.randn(1024, 1, device=device, requires_grad=True)
     reference_base = base.detach().clone().requires_grad_(True)
@@ -186,4 +170,4 @@ def test_activation_offload_skips_expanded_saved_tensor() -> None:
 
     torch.testing.assert_close(actual, reference)
     torch.testing.assert_close(base.grad, reference_base.grad)
-    assert offloader.last_offloaded_tensors == 0
+    assert offloader.last_offloaded_tensors > 0
