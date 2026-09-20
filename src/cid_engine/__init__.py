@@ -11,6 +11,7 @@ from cid_engine.checkpointing import (
     select_checkpoint_layer_indices,
 )
 from cid_engine.frozen_shard import shard_frozen_transformer
+from cid_engine.gradient_reduce import AsyncBucketedGradientReducer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
 __version__ = "0.7.1"
@@ -188,6 +189,7 @@ def refine_display_from_statistics(
 
 
 __all__ = [
+    "AsyncBucketedGradientReducer",
     "AsyncPinnedActivationOffloader",
     "AsyncPinnedGradientAccumulator",
     "SelectiveCheckpointController",
