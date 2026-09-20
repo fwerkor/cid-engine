@@ -171,6 +171,38 @@ def test_cuda_thought_corruption_training_path_matches_reference(dtype: torch.dt
     torch.testing.assert_close(actual[2], expected[2], rtol=0, atol=0)
 
 
+def test_async_pinned_gradient_accumulator_preserves_sum_and_reuses_buffers() -> None:
+    parameter = torch.nn.Parameter(torch.zeros(4096, device="cuda", dtype=torch.float32))
+    accumulator = cid_engine.AsyncPinnedGradientAccumulator(parameter.device)
+    expected = torch.zeros_like(parameter)
+
+    try:
+        for value in (1.0, 2.0, -0.5, 4.0):
+            gradient = torch.full_like(parameter, value)
+            expected.add_(gradient)
+            parameter.grad = gradient
+            accumulator.stash((("weight", parameter),))
+            assert parameter.grad is None
+
+        snapshot = accumulator.snapshot()
+        assert snapshot["weight"].is_pinned()
+        torch.testing.assert_close(snapshot["weight"], expected.cpu(), rtol=0, atol=0)
+        allocated = accumulator.allocated_bytes
+
+        accumulator.restore((("weight", parameter),))
+        torch.cuda.synchronize()
+        assert parameter.grad is not None
+        torch.testing.assert_close(parameter.grad, expected, rtol=0, atol=0)
+
+        accumulator.clear()
+        parameter.grad = torch.ones_like(parameter)
+        accumulator.stash((("weight", parameter),))
+        accumulator.flush()
+        assert accumulator.allocated_bytes == allocated
+    finally:
+        accumulator.close()
+
+
 def test_cuda_masked_diffusion_corruption_forces_empty_row_fallback() -> None:
     clean = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], device="cuda")
     ratio_random = torch.zeros(2, 1, device="cuda")

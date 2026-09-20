@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
+from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
 __version__ = "0.5.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
@@ -157,6 +158,7 @@ def refine_display_from_statistics(
 
 
 __all__ = [
+    "AsyncPinnedGradientAccumulator",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
     "display_corrupt_from_random",
