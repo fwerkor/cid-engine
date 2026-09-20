@@ -98,6 +98,68 @@ def test_thought_corruption_matches_reference() -> None:
         torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
 
 
+def test_display_corruption_matches_reference() -> None:
+    generator = torch.Generator().manual_seed(177)
+    token_ids = torch.randint(0, 257, (4, 41), generator=generator)
+    timesteps = torch.rand(4, generator=generator)
+    eligible = torch.rand(4, 41, generator=generator) > 0.2
+    corruption_random = torch.rand(4, 41, generator=generator)
+    replacement_random = torch.rand(4, 41, generator=generator)
+    replacement_offsets = torch.randint(1, 257, (4, 41), generator=generator)
+
+    expected = reference.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        256,
+        2,
+        257,
+        0.25,
+    )
+    actual = cid_engine.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        mask_token_id=256,
+        eos_token_id=2,
+        vocab_size=257,
+        replacement_fraction=0.25,
+    )
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
+
+
+def test_display_corruption_first_eligible_fallback() -> None:
+    token_ids = torch.tensor([[10, 11, 12, 13]])
+    timesteps = torch.tensor([1.0e-6])
+    eligible = torch.tensor([[False, False, True, True]])
+    corruption_random = torch.ones(1, 4)
+
+    corrupted, labels, masked, replaced = cid_engine.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        None,
+        None,
+        mask_token_id=99,
+        eos_token_id=None,
+        vocab_size=100,
+        replacement_fraction=0.0,
+    )
+
+    assert corrupted.tolist() == [[10, 11, 99, 13]]
+    assert labels.tolist() == [[-100, -100, 12, -100]]
+    assert masked.tolist() == [[False, False, True, False]]
+    assert not replaced.any()
+
+
 def test_masked_diffusion_corruption_matches_reference() -> None:
     generator = torch.Generator().manual_seed(71)
     clean = torch.randint(0, 97, (4, 33), generator=generator)
@@ -168,6 +230,7 @@ def test_non_int64_display_ids_are_rejected() -> None:
 
 
 def test_native_ops_are_registered() -> None:
+    assert hasattr(torch.ops.cid_engine, "display_corrupt_from_random")
     assert hasattr(torch.ops.cid_engine, "display_token_statistics")
     assert hasattr(torch.ops.cid_engine, "prefix_allocation_mask")
     assert hasattr(torch.ops.cid_engine, "masked_diffusion_corrupt_from_random")

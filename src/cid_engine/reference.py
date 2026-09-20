@@ -143,6 +143,68 @@ def masked_diffusion_corrupt_from_random(
     return corrupted, masked, mask_ratio, metrics
 
 
+def display_corrupt_from_random(
+    token_ids: Tensor,
+    timesteps: Tensor,
+    eligible_mask: Tensor,
+    corruption_random: Tensor,
+    replacement_random: Tensor | None,
+    replacement_offsets: Tensor | None,
+    mask_token_id: int,
+    eos_token_id: int | None,
+    vocab_size: int,
+    replacement_fraction: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    if token_ids.ndim != 2:
+        raise ValueError("token_ids must have shape [batch, tokens]")
+    batch, _ = token_ids.shape
+    if timesteps.shape != (batch,):
+        raise ValueError("timesteps must have shape [batch]")
+    if eligible_mask.shape != token_ids.shape:
+        raise ValueError("eligible_mask must match token_ids shape")
+    if corruption_random.shape != token_ids.shape:
+        raise ValueError("corruption_random must match token_ids shape")
+    if not 0.0 <= replacement_fraction <= 1.0:
+        raise ValueError("replacement_fraction must be in [0, 1]")
+
+    eligible = eligible_mask.bool()
+    corrupted_positions = (corruption_random.float() < timesteps.float()[:, None]) & eligible
+    empty_rows = ~corrupted_positions.any(dim=1)
+    fallback_rows = empty_rows & (timesteps.float() > 0.0) & eligible.any(dim=1)
+    first_eligible = eligible.long().argmax(dim=1, keepdim=True)
+    fallback = torch.zeros_like(corrupted_positions)
+    fallback.scatter_(1, first_eligible, fallback_rows.unsqueeze(1))
+    corrupted_positions |= fallback
+
+    if replacement_fraction:
+        if vocab_size < 3:
+            raise ValueError("visible replacement corruption requires vocab_size >= 3")
+        if replacement_random is None or replacement_offsets is None:
+            raise ValueError(
+                "replacement random tensors are required when replacement_fraction > 0"
+            )
+        replaced = corrupted_positions & (replacement_random.float() < replacement_fraction)
+        replacements = (token_ids + replacement_offsets) % vocab_size
+        for _ in range(3):
+            forbidden = (replacements == mask_token_id) | (replacements == token_ids)
+            if eos_token_id is not None:
+                forbidden |= replacements == eos_token_id
+            replacements = torch.where(forbidden, (replacements + 1) % vocab_size, replacements)
+        masked = corrupted_positions & ~replaced
+        corrupted = token_ids.masked_fill(masked, int(mask_token_id))
+        corrupted = torch.where(replaced, replacements, corrupted)
+    else:
+        replaced = torch.zeros_like(corrupted_positions)
+        masked = corrupted_positions
+        corrupted = token_ids.masked_fill(masked, int(mask_token_id))
+    labels = torch.where(
+        corrupted_positions,
+        token_ids,
+        torch.full((), -100, dtype=token_ids.dtype, device=token_ids.device),
+    )
+    return corrupted, labels, masked, replaced
+
+
 def thought_corrupt_from_epsilon(
     semantic: Tensor,
     timesteps: Tensor,

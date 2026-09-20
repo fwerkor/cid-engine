@@ -205,6 +205,107 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
   return {corrupted, local_noise, masked_epsilon};
 }
 
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+display_corrupt_from_random(
+    const at::Tensor& token_ids,
+    const at::Tensor& timesteps,
+    const at::Tensor& eligible_mask,
+    const at::Tensor& corruption_random,
+    const std::optional<at::Tensor>& replacement_random,
+    const std::optional<at::Tensor>& replacement_offsets,
+    const std::int64_t mask_token_id,
+    const std::optional<std::int64_t>& eos_token_id,
+    const std::int64_t vocab_size,
+    const double replacement_fraction) {
+  TORCH_CHECK(token_ids.dim() == 2, "token_ids must have shape [batch, tokens]");
+  TORCH_CHECK(token_ids.scalar_type() == at::kLong, "token_ids must use torch.int64");
+  const auto batch = token_ids.size(0);
+  const auto tokens = token_ids.size(1);
+  TORCH_CHECK(
+      timesteps.dim() == 1 && timesteps.size(0) == batch,
+      "timesteps must have shape [batch]");
+  TORCH_CHECK(
+      eligible_mask.sizes() == token_ids.sizes(),
+      "eligible_mask must match token_ids shape");
+  TORCH_CHECK(
+      corruption_random.sizes() == token_ids.sizes(),
+      "corruption_random must match token_ids shape");
+  TORCH_CHECK(
+      timesteps.is_floating_point() && corruption_random.is_floating_point(),
+      "timesteps and corruption_random must use floating dtypes");
+  TORCH_CHECK(
+      replacement_fraction >= 0.0 && replacement_fraction <= 1.0,
+      "replacement_fraction must be in [0, 1]");
+
+  const auto eligible = eligible_mask.to(at::kBool);
+  const auto timestep_f32 = timesteps.to(at::kFloat);
+  auto corrupted_positions =
+      corruption_random.to(at::kFloat).lt(timestep_f32.unsqueeze(1));
+  corrupted_positions.logical_and_(eligible);
+
+  const auto empty_rows = corrupted_positions.any(1).logical_not();
+  const auto fallback_rows =
+      empty_rows.logical_and(timestep_f32.gt(0.0)).logical_and(eligible.any(1));
+  const auto first_eligible =
+      std::get<1>(eligible.to(at::kLong).max(1)).unsqueeze(1);
+  auto fallback = at::zeros_like(corrupted_positions);
+  fallback.scatter_(1, first_eligible, fallback_rows.unsqueeze(1));
+  corrupted_positions.logical_or_(fallback);
+
+  at::Tensor replaced;
+  at::Tensor masked;
+  at::Tensor corrupted;
+  if (replacement_fraction > 0.0) {
+    TORCH_CHECK(
+        vocab_size >= 3,
+        "visible replacement corruption requires vocab_size >= 3");
+    TORCH_CHECK(
+        replacement_random.has_value() && replacement_offsets.has_value(),
+        "replacement random tensors are required when replacement_fraction > 0");
+    TORCH_CHECK(
+        replacement_random->sizes() == token_ids.sizes(),
+        "replacement_random must match token_ids shape");
+    TORCH_CHECK(
+        replacement_offsets->sizes() == token_ids.sizes(),
+        "replacement_offsets must match token_ids shape");
+    TORCH_CHECK(
+        replacement_random->is_floating_point(),
+        "replacement_random must use a floating dtype");
+    TORCH_CHECK(
+        replacement_offsets->scalar_type() == at::kLong,
+        "replacement_offsets must use torch.int64");
+
+    replaced = corrupted_positions.logical_and(
+        replacement_random->to(at::kFloat).lt(replacement_fraction));
+    auto replacements =
+        at::remainder(token_ids + *replacement_offsets, vocab_size);
+    for (int iteration = 0; iteration < 3; ++iteration) {
+      auto forbidden =
+          replacements.eq(mask_token_id).logical_or(replacements.eq(token_ids));
+      if (eos_token_id.has_value()) {
+        forbidden.logical_or_(replacements.eq(*eos_token_id));
+      }
+      replacements = at::where(
+          forbidden,
+          at::remainder(replacements + 1, vocab_size),
+          replacements);
+    }
+    masked = corrupted_positions.logical_and(replaced.logical_not());
+    corrupted = token_ids.masked_fill(masked, mask_token_id);
+    corrupted = at::where(replaced, replacements, corrupted);
+  } else {
+    replaced = at::zeros_like(corrupted_positions);
+    masked = corrupted_positions;
+    corrupted = token_ids.masked_fill(masked, mask_token_id);
+  }
+
+  auto labels = at::where(
+      corrupted_positions,
+      token_ids,
+      at::full({}, -100, token_ids.options()));
+  return {corrupted, labels, masked, replaced};
+}
+
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 masked_diffusion_corrupt_from_random(

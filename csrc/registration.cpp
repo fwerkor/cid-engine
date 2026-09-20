@@ -15,6 +15,12 @@ TORCH_LIBRARY(cid_engine, m) {
       "thought_corrupt_from_epsilon(Tensor semantic, Tensor timesteps, "
       "Tensor occupancy, Tensor epsilon) -> (Tensor, Tensor, Tensor)");
   m.def(
+      "display_corrupt_from_random(Tensor token_ids, Tensor timesteps, "
+      "Tensor eligible_mask, Tensor corruption_random, Tensor? replacement_random, "
+      "Tensor? replacement_offsets, int mask_token_id, int? eos_token_id, "
+      "int vocab_size, float replacement_fraction) "
+      "-> (Tensor, Tensor, Tensor, Tensor)");
+  m.def(
       "masked_diffusion_corrupt_from_random(Tensor clean_ids, "
       "Tensor ratio_random, Tensor mask_random, int mask_token_id, "
       "float min_mask_ratio, float max_mask_ratio) "
@@ -42,6 +48,9 @@ TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
   m.impl(
       "thought_corrupt_from_epsilon",
       TORCH_FN(cid::engine::thought_corrupt_from_epsilon));
+  m.impl(
+      "display_corrupt_from_random",
+      TORCH_FN(cid::engine::display_corrupt_from_random));
   m.impl(
       "masked_diffusion_corrupt_from_random",
       TORCH_FN(cid::engine::masked_diffusion_corrupt_from_random));

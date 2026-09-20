@@ -30,6 +30,19 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
     const at::Tensor& epsilon);
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+display_corrupt_from_random(
+    const at::Tensor& token_ids,
+    const at::Tensor& timesteps,
+    const at::Tensor& eligible_mask,
+    const at::Tensor& corruption_random,
+    const std::optional<at::Tensor>& replacement_random,
+    const std::optional<at::Tensor>& replacement_offsets,
+    std::int64_t mask_token_id,
+    const std::optional<std::int64_t>& eos_token_id,
+    std::int64_t vocab_size,
+    double replacement_fraction);
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 masked_diffusion_corrupt_from_random(
     const at::Tensor& clean_ids,
     const at::Tensor& ratio_random,

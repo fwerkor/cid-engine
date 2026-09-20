@@ -51,6 +51,33 @@ def thought_corrupt_from_epsilon(
     )
 
 
+def display_corrupt_from_random(
+    token_ids: Tensor,
+    timesteps: Tensor,
+    eligible_mask: Tensor,
+    corruption_random: Tensor,
+    replacement_random: Tensor | None,
+    replacement_offsets: Tensor | None,
+    *,
+    mask_token_id: int,
+    eos_token_id: int | None,
+    vocab_size: int,
+    replacement_fraction: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    return torch.ops.cid_engine.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible_mask,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        mask_token_id,
+        eos_token_id,
+        vocab_size,
+        replacement_fraction,
+    )
+
+
 def masked_diffusion_corrupt_from_random(
     clean_ids: Tensor,
     ratio_random: Tensor,
@@ -132,6 +159,7 @@ def refine_display_from_statistics(
 __all__ = [
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
+    "display_corrupt_from_random",
     "display_token_statistics",
     "live_slot_occupancy",
     "materialize_cell_snapshot",

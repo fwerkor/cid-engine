@@ -101,6 +101,76 @@ def test_cuda_masked_diffusion_corruption_matches_reference() -> None:
     torch.testing.assert_close(actual[3], expected[3], rtol=2e-5, atol=2e-6)
 
 
+def test_cuda_display_corruption_matches_reference() -> None:
+    generator = torch.Generator(device="cuda").manual_seed(913)
+    token_ids = torch.randint(0, 32000, (8, 1536), device="cuda", generator=generator)
+    timesteps = torch.rand(8, device="cuda", generator=generator)
+    eligible = torch.rand(8, 1536, device="cuda", generator=generator) > 0.15
+    corruption_random = torch.rand(8, 1536, device="cuda", generator=generator)
+    replacement_random = torch.rand(8, 1536, device="cuda", generator=generator)
+    replacement_offsets = torch.randint(
+        1,
+        32000,
+        (8, 1536),
+        device="cuda",
+        generator=generator,
+    )
+
+    expected = reference.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        31999,
+        2,
+        32000,
+        0.25,
+    )
+    actual = cid_engine.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        mask_token_id=31999,
+        eos_token_id=2,
+        vocab_size=32000,
+        replacement_fraction=0.25,
+    )
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
+def test_cuda_thought_corruption_training_path_matches_reference(dtype: torch.dtype) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(194)
+    semantic = torch.randn(4, 128, 257, device="cuda", dtype=dtype, generator=generator)
+    epsilon = torch.randn(4, 128, 257, device="cuda", dtype=dtype, generator=generator)
+    timesteps = torch.rand(4, 128, device="cuda", dtype=torch.float32, generator=generator)
+    occupancy = torch.rand(4, 128, 1, device="cuda", generator=generator) > 0.3
+
+    expected = reference.thought_corrupt_from_epsilon(
+        semantic,
+        timesteps,
+        occupancy,
+        epsilon,
+    )
+    actual = cid_engine.thought_corrupt_from_epsilon(
+        semantic,
+        timesteps,
+        occupancy,
+        epsilon,
+    )
+
+    rtol, atol = (4e-2, 5e-2) if dtype == torch.bfloat16 else (3e-3, 3e-4)
+    torch.testing.assert_close(actual[0], expected[0], rtol=rtol, atol=atol)
+    torch.testing.assert_close(actual[1], expected[1], rtol=0, atol=0)
+    torch.testing.assert_close(actual[2], expected[2], rtol=0, atol=0)
+
+
 def test_cuda_masked_diffusion_corruption_forces_empty_row_fallback() -> None:
     clean = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], device="cuda")
     ratio_random = torch.zeros(2, 1, device="cuda")

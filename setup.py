@@ -23,6 +23,8 @@ if with_cuda:
             "csrc/cuda/materialize_snapshot.cu",
             "csrc/cuda/linear_assignment.cu",
             "csrc/cuda/masked_diffusion.cu",
+            "csrc/cuda/display_corruption.cu",
+            "csrc/cuda/thought_corruption.cu",
         ]
     )
 
