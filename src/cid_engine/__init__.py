@@ -5,6 +5,11 @@ from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
 from cid_engine.activation_offload import AsyncPinnedActivationOffloader
+from cid_engine.checkpointing import (
+    SelectiveCheckpointController,
+    checkpoint_fraction_for_budget,
+    select_checkpoint_layer_indices,
+)
 from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
@@ -185,8 +190,10 @@ def refine_display_from_statistics(
 __all__ = [
     "AsyncPinnedActivationOffloader",
     "AsyncPinnedGradientAccumulator",
+    "SelectiveCheckpointController",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
+    "checkpoint_fraction_for_budget",
     "display_corrupt_from_random",
     "display_token_statistics",
     "live_slot_occupancy",
@@ -195,6 +202,7 @@ __all__ = [
     "prefix_allocation_mask",
     "refine_display_from_statistics",
     "rollout_slot_transition",
+    "select_checkpoint_layer_indices",
     "shard_frozen_transformer",
     "thought_corrupt_from_epsilon",
 ]
