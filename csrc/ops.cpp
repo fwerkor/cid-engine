@@ -271,6 +271,9 @@ at::Tensor materialize_cell_snapshot(
       selected.sizes() == at::IntArrayRef({batch, slots}),
       "selected must have shape [batch, slots]");
   TORCH_CHECK(
+      selected.scalar_type() == at::kBool,
+      "selected must use torch.bool");
+  TORCH_CHECK(
       semantic_indices.dim() == 1 &&
           semantic_indices.scalar_type() == at::kLong,
       "semantic_indices must be a one-dimensional int64 tensor");

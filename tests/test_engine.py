@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 import torch
 
 import cid_engine
@@ -272,6 +273,27 @@ def test_materialize_cell_snapshot_matches_reference() -> None:
     )
 
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_materialize_cell_snapshot_rejects_non_bool_selection() -> None:
+    semantic = torch.randn(1, 2, 4)
+    roles = torch.randn(1, 2, 3)
+    uncertainty = torch.rand(1, 2, 1)
+    noise_delta = torch.randn(1, 2, 1)
+    lifecycle = torch.randn(1, 2, 4)
+    selected = torch.ones(1, 2)
+    indices = torch.tensor([0, 3], dtype=torch.long)
+
+    with pytest.raises(RuntimeError, match="selected must use torch.bool"):
+        cid_engine.materialize_cell_snapshot(
+            semantic,
+            roles,
+            uncertainty,
+            noise_delta,
+            lifecycle,
+            selected,
+            indices,
+        )
 
 
 def test_batched_linear_assignment_matches_reference() -> None:
