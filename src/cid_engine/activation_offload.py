@@ -48,7 +48,15 @@ class _PinnedTensorPool:
 
     def acquire(self, source: Tensor) -> Tensor:
         size = tuple(source.size())
-        stride = tuple(source.stride())
+        # Expanded/as_strided views can have overlapping storage (most commonly
+        # zero strides).  Such a layout is valid for reading, but cannot be the
+        # destination of copy_.  Saved-tensor hooks only need to preserve the
+        # tensor values, so use a dense host buffer for overlapping views.
+        stride = (
+            tuple(torch.empty(size).stride())
+            if torch._debug_has_internal_overlap(source) != 0
+            else tuple(source.stride())
+        )
         key = self._key(dtype=source.dtype, size=size, stride=stride)
         available = self._available[key]
         for index in range(len(available) - 1, -1, -1):

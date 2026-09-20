@@ -49,6 +49,30 @@ def test_activation_offload_preserves_forward_and_gradient() -> None:
     torch.cuda.synchronize(device)
     assert offloader.pool_allocated_bytes <= allocated + (8 << 20)
 
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_activation_offload_handles_expanded_saved_tensor() -> None:
+    device = torch.device("cuda", 0)
+    source = torch.randn(1, 256, device=device, requires_grad=True)
+    reference_source = source.detach().clone().requires_grad_(True)
+
+    reference = reference_source.expand(64, -1).square().mean()
+    reference.backward()
+
+    offloader = AsyncPinnedActivationOffloader(
+        device,
+        max_bytes=4 << 20,
+        min_tensor_bytes=1024,
+    )
+    with offloader.saved_tensors_context():
+        actual = source.expand(64, -1).square().mean()
+        actual.backward()
+    torch.cuda.synchronize(device)
+
+    torch.testing.assert_close(actual, reference)
+    torch.testing.assert_close(source.grad, reference_source.grad)
+    assert offloader.last_offloaded_tensors > 0
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
 def test_activation_offload_back_to_back_contexts_preserve_gradients() -> None:
     device = torch.device("cuda", 0)
