@@ -46,6 +46,8 @@ The current C++ core owns CID-specific tensor primitives and the post-statistics
 - display-token confidence/prediction statistics;
 - C++ reveal/revision/EOS/structural-edit policy from those statistics;
 - compact materialization snapshots for one-transfer TCT control-state decoding.
+- fused masked-diffusion corruption from pre-generated random tensors for training, including
+  empty-row fallback and device-resident mask-ratio metrics.
 
 They are registered as torch.ops.cid_engine C++ operators, so tensors cross the Python/C++
 boundary without NumPy copies. The pure-Python implementation remains only as a semantic oracle.
@@ -118,6 +120,18 @@ locally with Clang:
 
 The underlying operator is also available directly through
 torch.ops.cid_engine.display_token_statistics. The Python reference module is retained only for semantic tests and benchmarks.
+
+## Training primitive
+
+masked_diffusion_corrupt_from_random keeps CID's Stage-0 mask construction on device. The
+caller supplies the two random tensors so RNG ownership stays with the training framework; the
+CUDA backend fuses mask-ratio construction, Bernoulli mask application, the mandatory one-token
+fallback for empty rows, corrupted token IDs, and mask/ratio metrics into the native path.
+
+This operator does not approximate the objective. The fallback chooses the minimum pre-generated
+mask draw on an otherwise-empty row; conditional on the row being empty, exchangeability makes
+that position uniformly distributed, matching the previous fallback distribution without a
+device-to-host branch.
 
 ## Benchmark
 

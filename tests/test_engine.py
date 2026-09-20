@@ -98,6 +98,63 @@ def test_thought_corruption_matches_reference() -> None:
         torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
 
 
+def test_masked_diffusion_corruption_matches_reference() -> None:
+    generator = torch.Generator().manual_seed(71)
+    clean = torch.randint(0, 97, (4, 33), generator=generator)
+    ratio_random = torch.rand(4, 1, generator=generator)
+    mask_random = torch.rand(4, 33, generator=generator)
+
+    expected = reference.masked_diffusion_corrupt_from_random(
+        clean,
+        ratio_random,
+        mask_random,
+        96,
+        0.001,
+        0.9,
+    )
+    actual = cid_engine.masked_diffusion_corrupt_from_random(
+        clean,
+        ratio_random,
+        mask_random,
+        mask_token_id=96,
+        min_mask_ratio=0.001,
+        max_mask_ratio=0.9,
+    )
+
+    torch.testing.assert_close(actual[0], expected[0], rtol=0, atol=0)
+    torch.testing.assert_close(actual[1], expected[1], rtol=0, atol=0)
+    torch.testing.assert_close(actual[2], expected[2], rtol=0, atol=0)
+    torch.testing.assert_close(actual[3], expected[3], rtol=0, atol=0)
+
+
+def test_masked_diffusion_corruption_forces_one_mask_without_host_branch() -> None:
+    clean = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], dtype=torch.long)
+    ratio_random = torch.zeros(2, 1)
+    mask_random = torch.tensor(
+        [[0.9, 0.7, 0.8, 0.6], [0.5, 0.4, 0.3, 0.2]],
+        dtype=torch.float32,
+    )
+
+    corrupted, masked, ratios, metrics = cid_engine.masked_diffusion_corrupt_from_random(
+        clean,
+        ratio_random,
+        mask_random,
+        mask_token_id=99,
+        min_mask_ratio=1.0e-6,
+        max_mask_ratio=1.0e-6,
+    )
+
+    assert masked.sum(dim=1).tolist() == [1, 1]
+    assert masked.tolist() == [
+        [False, False, False, True],
+        [False, False, False, True],
+    ]
+    assert corrupted.tolist() == [[1, 2, 3, 99], [5, 6, 7, 99]]
+    torch.testing.assert_close(ratios, torch.full((2, 1), 1.0e-6))
+    torch.testing.assert_close(metrics[0], torch.tensor(0.25))
+    torch.testing.assert_close(metrics[1], torch.tensor(1.0e-6))
+
+
 def test_non_int64_display_ids_are_rejected() -> None:
     token_ids = torch.tensor([[0, 1]], dtype=torch.int32)
     logits = torch.zeros(1, 2, 3)
@@ -113,6 +170,7 @@ def test_non_int64_display_ids_are_rejected() -> None:
 def test_native_ops_are_registered() -> None:
     assert hasattr(torch.ops.cid_engine, "display_token_statistics")
     assert hasattr(torch.ops.cid_engine, "prefix_allocation_mask")
+    assert hasattr(torch.ops.cid_engine, "masked_diffusion_corrupt_from_random")
 
 
 def test_cuda_build_flag_is_boolean() -> None:

@@ -111,6 +111,38 @@ def batched_linear_assignment(costs: Tensor, row_counts: Tensor) -> Tensor:
         return torch.tensor(assignments, dtype=torch.long, device=costs.device)
     return result
 
+def masked_diffusion_corrupt_from_random(
+    clean_ids: Tensor,
+    ratio_random: Tensor,
+    mask_random: Tensor,
+    mask_token_id: int,
+    min_mask_ratio: float,
+    max_mask_ratio: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    if clean_ids.ndim != 2:
+        raise ValueError("clean_ids must have shape [batch, tokens]")
+    batch, tokens = clean_ids.shape
+    if ratio_random.shape != (batch, 1):
+        raise ValueError("ratio_random must have shape [batch, 1]")
+    if mask_random.shape != clean_ids.shape:
+        raise ValueError("mask_random must match clean_ids shape")
+    if not 0.0 < min_mask_ratio <= max_mask_ratio <= 1.0:
+        raise ValueError("mask ratio range must satisfy 0 < min <= max <= 1")
+
+    ratio_f32 = ratio_random.float()
+    mask_random_f32 = mask_random.float()
+    mask_ratio = min_mask_ratio + (max_mask_ratio - min_mask_ratio) * ratio_f32
+    masked = mask_random_f32 < mask_ratio
+    empty_rows = ~masked.any(dim=1)
+    fallback_positions = mask_random_f32.argmin(dim=1, keepdim=True)
+    fallback = torch.zeros_like(masked)
+    fallback.scatter_(1, fallback_positions, empty_rows.unsqueeze(1))
+    masked |= fallback
+    corrupted = clean_ids.masked_fill(masked, int(mask_token_id))
+    metrics = torch.stack((masked.float().mean(), mask_ratio.mean()))
+    return corrupted, masked, mask_ratio, metrics
+
+
 def thought_corrupt_from_epsilon(
     semantic: Tensor,
     timesteps: Tensor,

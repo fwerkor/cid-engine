@@ -29,6 +29,15 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
     const at::Tensor& occupancy,
     const at::Tensor& epsilon);
 
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+masked_diffusion_corrupt_from_random(
+    const at::Tensor& clean_ids,
+    const at::Tensor& ratio_random,
+    const at::Tensor& mask_random,
+    std::int64_t mask_token_id,
+    double min_mask_ratio,
+    double max_mask_ratio);
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& logits);

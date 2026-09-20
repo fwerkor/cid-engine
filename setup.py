@@ -22,6 +22,7 @@ if with_cuda:
             "csrc/cuda/prefix_allocation.cu",
             "csrc/cuda/materialize_snapshot.cu",
             "csrc/cuda/linear_assignment.cu",
+            "csrc/cuda/masked_diffusion.cu",
         ]
     )
 

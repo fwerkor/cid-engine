@@ -205,6 +205,59 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
   return {corrupted, local_noise, masked_epsilon};
 }
 
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+masked_diffusion_corrupt_from_random(
+    const at::Tensor& clean_ids,
+    const at::Tensor& ratio_random,
+    const at::Tensor& mask_random,
+    const std::int64_t mask_token_id,
+    const double min_mask_ratio,
+    const double max_mask_ratio) {
+  TORCH_CHECK(clean_ids.dim() == 2, "clean_ids must have shape [batch, tokens]");
+  TORCH_CHECK(clean_ids.scalar_type() == at::kLong, "clean_ids must use torch.int64");
+  const auto batch = clean_ids.size(0);
+  const auto tokens = clean_ids.size(1);
+  TORCH_CHECK(batch > 0 && tokens > 0, "clean_ids dimensions must be non-empty");
+  TORCH_CHECK(
+      ratio_random.sizes() == at::IntArrayRef({batch, 1}),
+      "ratio_random must have shape [batch, 1]");
+  TORCH_CHECK(
+      mask_random.sizes() == clean_ids.sizes(),
+      "mask_random must match clean_ids shape");
+  TORCH_CHECK(
+      ratio_random.is_floating_point() && mask_random.is_floating_point(),
+      "random tensors must use floating dtypes");
+  TORCH_CHECK(
+      min_mask_ratio > 0.0 &&
+          min_mask_ratio <= max_mask_ratio &&
+          max_mask_ratio <= 1.0,
+      "mask ratio range must satisfy 0 < min <= max <= 1");
+
+  auto ratio_f32 = ratio_random.to(at::kFloat);
+  auto mask_random_f32 = mask_random.to(at::kFloat);
+  auto mask_ratio =
+      min_mask_ratio + (max_mask_ratio - min_mask_ratio) * ratio_f32;
+  auto masked = mask_random_f32.lt(mask_ratio);
+
+  // Conditional on an empty Bernoulli row, argmin(mask_random) is uniformly
+  // distributed over positions by exchangeability.  It therefore preserves
+  // the original uniform fallback semantics without a host sync or extra RNG.
+  auto empty_rows = masked.any(1).logical_not();
+  auto fallback_positions = std::get<1>(mask_random_f32.min(1));
+  auto fallback = at::zeros_like(masked);
+  fallback.scatter_(
+      1,
+      fallback_positions.unsqueeze(1),
+      empty_rows.unsqueeze(1));
+  masked.logical_or_(fallback);
+
+  auto corrupted = clean_ids.masked_fill(masked, mask_token_id);
+  auto metrics = at::stack(
+      {masked.to(at::kFloat).mean(), mask_ratio.mean()});
+  return {corrupted, masked, mask_ratio, metrics};
+}
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& logits) {

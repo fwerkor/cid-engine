@@ -5,7 +5,7 @@ from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
 
-__version__ = "0.4.2"
+__version__ = "0.5.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 
 
@@ -48,6 +48,25 @@ def thought_corrupt_from_epsilon(
         timesteps,
         occupancy,
         epsilon,
+    )
+
+
+def masked_diffusion_corrupt_from_random(
+    clean_ids: Tensor,
+    ratio_random: Tensor,
+    mask_random: Tensor,
+    *,
+    mask_token_id: int,
+    min_mask_ratio: float,
+    max_mask_ratio: float,
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+    return torch.ops.cid_engine.masked_diffusion_corrupt_from_random(
+        clean_ids,
+        ratio_random,
+        mask_random,
+        mask_token_id,
+        min_mask_ratio,
+        max_mask_ratio,
     )
 
 
@@ -116,6 +135,7 @@ __all__ = [
     "display_token_statistics",
     "live_slot_occupancy",
     "materialize_cell_snapshot",
+    "masked_diffusion_corrupt_from_random",
     "prefix_allocation_mask",
     "refine_display_from_statistics",
     "thought_corrupt_from_epsilon",
