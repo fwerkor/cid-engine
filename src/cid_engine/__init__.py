@@ -6,7 +6,7 @@ from torch import Tensor
 from cid_engine import _C  # noqa: F401
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 
 
