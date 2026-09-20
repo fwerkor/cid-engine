@@ -4,6 +4,7 @@ import torch
 from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
+from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
 __version__ = "0.6.0"
@@ -192,5 +193,6 @@ __all__ = [
     "prefix_allocation_mask",
     "refine_display_from_statistics",
     "rollout_slot_transition",
+    "shard_frozen_transformer",
     "thought_corrupt_from_epsilon",
 ]
