@@ -13,6 +13,11 @@ from cid_engine.checkpointing import (
     checkpoint_fraction_for_budget,
     select_checkpoint_layer_indices,
 )
+from cid_engine.diagnostics import (
+    AttentionBackendReport,
+    classify_attention_backend,
+    profile_attention_backend,
+)
 from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_reduce import AsyncBucketedGradientReducer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
@@ -197,15 +202,18 @@ __all__ = [
     "AsyncPinnedGradientAccumulator",
     "LayerActivationPrefetchController",
     "SelectiveCheckpointController",
+    "AttentionBackendReport",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
     "checkpoint_fraction_for_budget",
+    "classify_attention_backend",
     "display_corrupt_from_random",
     "display_token_statistics",
     "live_slot_occupancy",
     "materialize_cell_snapshot",
     "masked_diffusion_corrupt_from_random",
     "prefix_allocation_mask",
+    "profile_attention_backend",
     "refine_display_from_statistics",
     "rollout_slot_transition",
     "select_checkpoint_layer_indices",
