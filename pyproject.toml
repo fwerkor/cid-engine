@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cid-engine"
-version = "0.6.0"
+version = "0.7.0"
 description = "C++20 execution engine for Continuous Interaction Diffusion"
 readme = "README.md"
 requires-python = ">=3.10"

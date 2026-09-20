@@ -133,6 +133,22 @@ mask draw on an otherwise-empty row; conditional on the row being empty, exchang
 that position uniformly distributed, matching the previous fallback distribution without a
 device-to-host branch.
 
+### Training memory engine
+
+Version 0.7 adds training-memory primitives used by CID Stage A without changing the optimization
+objective:
+
+- `shard_frozen_transformer` FULL_SHARDs immutable transformer blocks and overlaps layer
+  materialization with compute, while leaving directly accessed embeddings resident;
+- `AsyncPinnedActivationOffloader` moves selected saved activations through reusable pinned host
+  buffers on dedicated CUDA streams and prefetches them for backward;
+- `SelectiveCheckpointController` checkpoints only a deterministic subset of transformer layers,
+  with `checkpoint_fraction_for_budget` converting an activation-memory budget into a layer
+  fraction.
+
+These primitives retain PyTorch autograd and distributed collectives as the semantic reference;
+they optimize storage, transfer scheduling, and rematerialization rather than changing model math.
+
 ## Benchmark
 
     cid-engine-bench --device cuda --batch 1 --tokens 128 --vocab 65536
