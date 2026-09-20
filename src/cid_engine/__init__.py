@@ -22,7 +22,7 @@ from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_reduce import AsyncBucketedGradientReducer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 
 

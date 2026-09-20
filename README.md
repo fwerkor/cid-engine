@@ -135,19 +135,25 @@ device-to-host branch.
 
 ### Training memory engine
 
-Version 0.7 adds training-memory primitives used by CID Stage A without changing the optimization
-objective:
+Version 0.7 introduced Stage-A training-memory primitives; version 0.8 extends them into an
+execution scheduler without changing the optimization objective:
 
 - `shard_frozen_transformer` FULL_SHARDs immutable transformer blocks and overlaps layer
   materialization with compute, while leaving directly accessed embeddings resident;
 - `AsyncPinnedActivationOffloader` moves selected saved activations through reusable pinned host
-  buffers on dedicated CUDA streams and prefetches them for backward;
+  buffers on dedicated CUDA streams; `LayerActivationPrefetchController` tags activations by
+  transformer layer and starts H2D restoration before each layer backward;
 - `SelectiveCheckpointController` checkpoints only a deterministic subset of transformer layers,
   with `checkpoint_fraction_for_budget` converting an activation-memory budget into a layer
-  fraction.
+  fraction;
+- `AsyncBucketedGradientReducer` launches deterministic gradient all-reduces as buckets become
+  ready during the final accumulation backward, overlapping communication with remaining compute;
+- `profile_attention_backend` reports the actual SDPA backend used by a model path so Flash,
+  memory-efficient, math, and eager fallbacks can be distinguished before adding custom kernels.
 
 These primitives retain PyTorch autograd and distributed collectives as the semantic reference;
-they optimize storage, transfer scheduling, and rematerialization rather than changing model math.
+they optimize storage, transfer scheduling, communication overlap, and rematerialization rather
+than changing model math.
 
 ## Benchmark
 
