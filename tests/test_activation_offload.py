@@ -48,3 +48,33 @@ def test_activation_offload_preserves_forward_and_gradient() -> None:
         torch.nn.functional.gelu(source2 @ weight.detach()).sum().backward()
     torch.cuda.synchronize(device)
     assert offloader.pool_allocated_bytes <= allocated + (8 << 20)
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_activation_offload_back_to_back_contexts_preserve_gradients() -> None:
+    device = torch.device("cuda", 0)
+    torch.manual_seed(19)
+    weight = torch.randn(1024, 1024, device=device, dtype=torch.float32)
+    offloader = AsyncPinnedActivationOffloader(
+        device,
+        max_bytes=96 << 20,
+        min_tensor_bytes=1024,
+        prefetch_depth=3,
+    )
+    actual_gradients = []
+    reference_gradients = []
+    for _ in range(4):
+        source = torch.randn(2048, 1024, device=device, requires_grad=True)
+        reference_source = source.detach().clone().requires_grad_(True)
+        with offloader.saved_tensors_context():
+            actual = torch.nn.functional.gelu(source @ weight).square().mean()
+            actual.backward()
+        reference = torch.nn.functional.gelu(reference_source @ weight).square().mean()
+        reference.backward()
+        actual_gradients.append(source.grad.detach().clone())
+        reference_gradients.append(reference_source.grad.detach().clone())
+
+    torch.cuda.synchronize(device)
+    for actual_gradient, reference_gradient in zip(
+        actual_gradients, reference_gradients, strict=True
+    ):
+        torch.testing.assert_close(actual_gradient, reference_gradient)

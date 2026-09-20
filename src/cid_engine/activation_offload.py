@@ -68,6 +68,7 @@ class _OffloadedActivation:
     index: int
     restored: Tensor | None = None
     h2d_ready: torch.cuda.Event | None = None
+    reuse_ready: torch.cuda.Event | None = None
 
 
 class AsyncPinnedActivationOffloader:
@@ -187,6 +188,7 @@ class AsyncPinnedActivationOffloader:
             current.wait_event(packed.h2d_ready)
             restored = packed.restored
             restored.record_stream(current)
+            packed.reuse_ready = packed.h2d_ready
             packed.restored = None
             packed.h2d_ready = None
             return restored
@@ -198,7 +200,8 @@ class AsyncPinnedActivationOffloader:
             self.last_offloaded_bytes = offloaded_bytes
             self.last_offloaded_tensors = len(handles)
             for handle in handles:
-                pending = handle.h2d_ready or handle.d2h_ready
+                pending = handle.reuse_ready or handle.h2d_ready or handle.d2h_ready
                 handle.restored = None
                 handle.h2d_ready = None
+                handle.reuse_ready = None
                 self._pool.release(handle.cpu_tensor, pending)
