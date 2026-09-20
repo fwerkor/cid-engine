@@ -9,6 +9,21 @@ import torch
 from torch import Tensor
 
 
+def _is_non_overlapping_layout(tensor: Tensor) -> bool:
+    dimensions = [
+        (abs(int(stride)), int(size))
+        for size, stride in zip(tensor.size(), tensor.stride(), strict=True)
+        if int(size) > 1
+    ]
+    dimensions.sort()
+    storage_span = 1
+    for stride, size in dimensions:
+        if stride < storage_span:
+            return False
+        storage_span += (size - 1) * stride
+    return True
+
+
 @dataclass(slots=True)
 class _PoolEntry:
     tensor: Tensor
@@ -175,6 +190,8 @@ class AsyncPinnedActivationOffloader:
             if self.requires_grad_only and not tensor.requires_grad:
                 return tensor
             if tensor.untyped_storage().data_ptr() in excluded:
+                return tensor
+            if not _is_non_overlapping_layout(tensor):
                 return tensor
             tensor_bytes = tensor.numel() * tensor.element_size()
             if tensor_bytes < self.min_tensor_bytes:
