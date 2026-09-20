@@ -4,7 +4,10 @@ import torch
 from torch import Tensor
 
 from cid_engine import _C  # noqa: F401
-from cid_engine.activation_offload import AsyncPinnedActivationOffloader
+from cid_engine.activation_offload import (
+    AsyncPinnedActivationOffloader,
+    LayerActivationPrefetchController,
+)
 from cid_engine.checkpointing import (
     SelectiveCheckpointController,
     checkpoint_fraction_for_budget,
@@ -192,6 +195,7 @@ __all__ = [
     "AsyncBucketedGradientReducer",
     "AsyncPinnedActivationOffloader",
     "AsyncPinnedGradientAccumulator",
+    "LayerActivationPrefetchController",
     "SelectiveCheckpointController",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",

@@ -78,3 +78,48 @@ def test_activation_offload_back_to_back_contexts_preserve_gradients() -> None:
         actual_gradients, reference_gradients, strict=True
     ):
         torch.testing.assert_close(actual_gradient, reference_gradient)
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA required")
+def test_layer_activation_prefetch_preserves_gradients() -> None:
+    from cid_engine.activation_offload import LayerActivationPrefetchController
+
+    device = torch.device("cuda", 0)
+    torch.manual_seed(91)
+    actual = torch.nn.Sequential(
+        torch.nn.Linear(512, 1024, bias=False),
+        torch.nn.GELU(),
+        torch.nn.Linear(1024, 512, bias=False),
+    ).to(device)
+    reference = torch.nn.Sequential(
+        torch.nn.Linear(512, 1024, bias=False),
+        torch.nn.GELU(),
+        torch.nn.Linear(1024, 512, bias=False),
+    ).to(device)
+    reference.load_state_dict(actual.state_dict())
+    source = torch.randn(256, 512, device=device, requires_grad=True)
+    reference_source = source.detach().clone().requires_grad_(True)
+
+    offloader = AsyncPinnedActivationOffloader(
+        device,
+        max_bytes=64 << 20,
+        min_tensor_bytes=1024,
+        prefetch_depth=2,
+    )
+    controller = LayerActivationPrefetchController(actual, offloader, prefetch_layers=2)
+    try:
+        with offloader.saved_tensors_context():
+            loss = actual(source).square().mean()
+            loss.backward()
+        reference_loss = reference(reference_source).square().mean()
+        reference_loss.backward()
+        torch.cuda.synchronize(device)
+
+        torch.testing.assert_close(loss, reference_loss)
+        torch.testing.assert_close(source.grad, reference_source.grad)
+        for actual_parameter, reference_parameter in zip(
+            actual.parameters(), reference.parameters(), strict=True
+        ):
+            torch.testing.assert_close(actual_parameter.grad, reference_parameter.grad)
+        assert offloader.last_layer_prefetches > 0
+    finally:
+        controller.close()
