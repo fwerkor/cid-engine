@@ -395,6 +395,48 @@ def test_cuda_batched_linear_assignment_matches_reference(columns: int) -> None:
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+@pytest.mark.parametrize("dtype", [torch.float16, torch.bfloat16, torch.float32])
+def test_cuda_rollout_slot_transition_matches_reference(dtype: torch.dtype) -> None:
+    generator = torch.Generator(device="cuda").manual_seed(744)
+    occupancy = torch.randint(0, 2, (8, 128), device="cuda", generator=generator).bool()
+    allocation_logits = torch.randn(
+        8, 128, device="cuda", dtype=dtype, generator=generator
+    )
+    lifecycle_logits = torch.randn(
+        8, 128, 4, device="cuda", dtype=dtype, generator=generator
+    )
+    revision_logits = torch.randn(
+        8, 128, 3, device="cuda", dtype=dtype, generator=generator
+    )
+    input_lifecycle = torch.randn(
+        8, 128, 4, device="cuda", dtype=dtype, generator=generator
+    )
+    input_lifecycle[:, ::7] = 0
+
+    expected = reference.rollout_slot_transition(
+        occupancy,
+        allocation_logits,
+        lifecycle_logits,
+        revision_logits,
+        input_lifecycle,
+        0.45,
+        4,
+        3,
+    )
+    actual = cid_engine.rollout_slot_transition(
+        occupancy,
+        allocation_logits,
+        lifecycle_logits,
+        revision_logits,
+        input_lifecycle,
+        threshold=0.45,
+        max_allocations=4,
+        retired_index=3,
+    )
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
+
+
 def test_cuda_batched_linear_assignment_keeps_first_tie() -> None:
     costs = torch.zeros(2, 8, 8, device="cuda")
     row_counts = torch.tensor([4, 8], device="cuda", dtype=torch.long)

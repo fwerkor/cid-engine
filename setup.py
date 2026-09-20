@@ -25,6 +25,7 @@ if with_cuda:
             "csrc/cuda/masked_diffusion.cu",
             "csrc/cuda/display_corruption.cu",
             "csrc/cuda/thought_corruption.cu",
+            "csrc/cuda/rollout_state.cu",
         ]
     )
 

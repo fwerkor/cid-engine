@@ -171,6 +171,87 @@ at::Tensor batched_linear_assignment(
   return original_device.is_cpu() ? output : output.to(original_device);
 }
 
+std::tuple<
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor>
+rollout_slot_transition(
+    const at::Tensor& occupancy_input,
+    const at::Tensor& allocation_logits,
+    const at::Tensor& lifecycle_logits,
+    const at::Tensor& revision_logits,
+    const at::Tensor& input_lifecycle,
+    const double threshold,
+    const std::int64_t max_allocations,
+    const std::int64_t retired_index) {
+  TORCH_CHECK(
+      occupancy_input.dim() == 2 ||
+          (occupancy_input.dim() == 3 && occupancy_input.size(-1) == 1),
+      "occupancy must have shape [batch, slots] or [batch, slots, 1]");
+  auto occupancy =
+      occupancy_input.dim() == 3 ? occupancy_input.squeeze(-1) : occupancy_input;
+  const auto batch = occupancy.size(0);
+  const auto slots = occupancy.size(1);
+  TORCH_CHECK(
+      allocation_logits.sizes() == occupancy.sizes(),
+      "allocation_logits must match occupancy shape");
+  TORCH_CHECK(
+      lifecycle_logits.dim() == 3 &&
+          lifecycle_logits.size(0) == batch &&
+          lifecycle_logits.size(1) == slots,
+      "lifecycle_logits must have shape [batch, slots, lifecycles]");
+  TORCH_CHECK(
+      revision_logits.dim() == 3 &&
+          revision_logits.size(0) == batch &&
+          revision_logits.size(1) == slots,
+      "revision_logits must have shape [batch, slots, revisions]");
+  TORCH_CHECK(
+      input_lifecycle.dim() == 3 &&
+          input_lifecycle.size(0) == batch &&
+          input_lifecycle.size(1) == slots,
+      "input_lifecycle must have shape [batch, slots, lifecycles]");
+  TORCH_CHECK(
+      lifecycle_logits.size(-1) == input_lifecycle.size(-1),
+      "predicted and input lifecycle widths must match");
+  TORCH_CHECK(
+      retired_index >= 0 && retired_index < lifecycle_logits.size(-1),
+      "retired_index is outside lifecycle width");
+  TORCH_CHECK(threshold >= 0.0 && threshold <= 1.0, "threshold must be in [0, 1]");
+  TORCH_CHECK(max_allocations > 0, "max_allocations must be positive");
+
+  auto occupied = occupancy.to(at::kBool);
+  auto allocation = prefix_allocation_mask(
+      occupied,
+      allocation_logits,
+      threshold,
+      max_allocations);
+  auto next_occupancy = occupied.logical_or(allocation);
+  auto lifecycle_indices = std::get<1>(lifecycle_logits.max(-1));
+  auto revision_indices = std::get<1>(revision_logits.max(-1));
+  auto input_lifecycle_indices = std::get<1>(input_lifecycle.max(-1));
+  auto input_lifecycle_present =
+      input_lifecycle.abs().sum(-1).ne(0);
+  auto previous_retired =
+      occupied.logical_and(input_lifecycle_indices.eq(retired_index));
+  auto newly_allocated =
+      next_occupancy.logical_and(occupied.logical_not());
+  auto predicted_retired = lifecycle_indices.eq(retired_index);
+  auto live_slots = next_occupancy
+                        .logical_and(previous_retired.logical_not())
+                        .logical_and(
+                            predicted_retired.logical_not().logical_or(newly_allocated));
+  return {
+      next_occupancy,
+      lifecycle_indices,
+      revision_indices,
+      input_lifecycle_indices,
+      input_lifecycle_present,
+      live_slots};
+}
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
     const at::Tensor& semantic,
     const at::Tensor& timesteps,

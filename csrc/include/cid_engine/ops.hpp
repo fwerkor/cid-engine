@@ -23,6 +23,23 @@ at::Tensor batched_linear_assignment(
     const at::Tensor& costs,
     const at::Tensor& row_counts);
 
+std::tuple<
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor,
+    at::Tensor>
+rollout_slot_transition(
+    const at::Tensor& occupancy,
+    const at::Tensor& allocation_logits,
+    const at::Tensor& lifecycle_logits,
+    const at::Tensor& revision_logits,
+    const at::Tensor& input_lifecycle,
+    double threshold,
+    std::int64_t max_allocations,
+    std::int64_t retired_index);
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> thought_corrupt_from_epsilon(
     const at::Tensor& semantic,
     const at::Tensor& timesteps,

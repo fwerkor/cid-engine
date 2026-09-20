@@ -112,6 +112,29 @@ def batched_linear_assignment(
     return torch.ops.cid_engine.batched_linear_assignment(costs, row_counts)
 
 
+def rollout_slot_transition(
+    occupancy: Tensor,
+    allocation_logits: Tensor,
+    lifecycle_logits: Tensor,
+    revision_logits: Tensor,
+    input_lifecycle: Tensor,
+    *,
+    threshold: float,
+    max_allocations: int,
+    retired_index: int,
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    return torch.ops.cid_engine.rollout_slot_transition(
+        occupancy,
+        allocation_logits,
+        lifecycle_logits,
+        revision_logits,
+        input_lifecycle,
+        threshold,
+        max_allocations,
+        retired_index,
+    )
+
+
 def materialize_cell_snapshot(
     thought_semantic: Tensor,
     role_logits: Tensor,
@@ -168,5 +191,6 @@ __all__ = [
     "masked_diffusion_corrupt_from_random",
     "prefix_allocation_mask",
     "refine_display_from_statistics",
+    "rollout_slot_transition",
     "thought_corrupt_from_epsilon",
 ]

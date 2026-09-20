@@ -111,6 +111,45 @@ def batched_linear_assignment(costs: Tensor, row_counts: Tensor) -> Tensor:
         return torch.tensor(assignments, dtype=torch.long, device=costs.device)
     return result
 
+
+def rollout_slot_transition(
+    occupancy: Tensor,
+    allocation_logits: Tensor,
+    lifecycle_logits: Tensor,
+    revision_logits: Tensor,
+    input_lifecycle: Tensor,
+    threshold: float,
+    max_allocations: int,
+    retired_index: int,
+) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+    if occupancy.ndim == 3:
+        occupancy = occupancy.squeeze(-1)
+    occupied = occupancy.bool()
+    allocation = prefix_allocation_mask(
+        occupied,
+        allocation_logits,
+        threshold,
+        max_allocations,
+    )
+    next_occupancy = occupied | allocation
+    lifecycle_indices = lifecycle_logits.argmax(dim=-1)
+    revision_indices = revision_logits.argmax(dim=-1)
+    input_lifecycle_indices = input_lifecycle.argmax(dim=-1)
+    input_lifecycle_present = input_lifecycle.abs().sum(dim=-1).ne(0)
+    previous_retired = occupied & (input_lifecycle_indices == retired_index)
+    newly_allocated = next_occupancy & ~occupied
+    predicted_retired = lifecycle_indices == retired_index
+    live_slots = next_occupancy & ~previous_retired & (~predicted_retired | newly_allocated)
+    return (
+        next_occupancy,
+        lifecycle_indices,
+        revision_indices,
+        input_lifecycle_indices,
+        input_lifecycle_present,
+        live_slots,
+    )
+
+
 def masked_diffusion_corrupt_from_random(
     clean_ids: Tensor,
     ratio_random: Tensor,

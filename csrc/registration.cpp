@@ -12,6 +12,11 @@ TORCH_LIBRARY(cid_engine, m) {
   m.def(
       "batched_linear_assignment(Tensor costs, Tensor row_counts) -> Tensor");
   m.def(
+      "rollout_slot_transition(Tensor occupancy, Tensor allocation_logits, "
+      "Tensor lifecycle_logits, Tensor revision_logits, Tensor input_lifecycle, "
+      "float threshold, int max_allocations, int retired_index) "
+      "-> (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor)");
+  m.def(
       "thought_corrupt_from_epsilon(Tensor semantic, Tensor timesteps, "
       "Tensor occupancy, Tensor epsilon) -> (Tensor, Tensor, Tensor)");
   m.def(
@@ -45,6 +50,9 @@ TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
   m.impl(
       "batched_linear_assignment",
       TORCH_FN(cid::engine::batched_linear_assignment));
+  m.impl(
+      "rollout_slot_transition",
+      TORCH_FN(cid::engine::rollout_slot_transition));
   m.impl(
       "thought_corrupt_from_epsilon",
       TORCH_FN(cid::engine::thought_corrupt_from_epsilon));

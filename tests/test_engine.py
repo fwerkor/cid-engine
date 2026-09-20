@@ -44,6 +44,39 @@ def test_prefix_allocation_matches_reference() -> None:
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
+def test_rollout_slot_transition_matches_reference() -> None:
+    generator = torch.Generator().manual_seed(433)
+    occupancy = torch.randint(0, 2, (3, 17, 1), generator=generator).bool()
+    allocation_logits = torch.randn(3, 17, generator=generator)
+    lifecycle_logits = torch.randn(3, 17, 4, generator=generator)
+    revision_logits = torch.randn(3, 17, 3, generator=generator)
+    input_lifecycle = torch.randn(3, 17, 4, generator=generator)
+    input_lifecycle[:, ::5] = 0
+
+    expected = reference.rollout_slot_transition(
+        occupancy,
+        allocation_logits,
+        lifecycle_logits,
+        revision_logits,
+        input_lifecycle,
+        0.45,
+        3,
+        3,
+    )
+    actual = cid_engine.rollout_slot_transition(
+        occupancy,
+        allocation_logits,
+        lifecycle_logits,
+        revision_logits,
+        input_lifecycle,
+        threshold=0.45,
+        max_allocations=3,
+        retired_index=3,
+    )
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(candidate, oracle, rtol=0, atol=0)
+
+
 def test_live_slot_occupancy_matches_reference() -> None:
     occupancy = torch.tensor([[[1.0], [0.7], [0.0], [1.2]]])
     lifecycle = torch.zeros(1, 4, 3)
@@ -234,6 +267,7 @@ def test_native_ops_are_registered() -> None:
     assert hasattr(torch.ops.cid_engine, "display_token_statistics")
     assert hasattr(torch.ops.cid_engine, "prefix_allocation_mask")
     assert hasattr(torch.ops.cid_engine, "masked_diffusion_corrupt_from_random")
+    assert hasattr(torch.ops.cid_engine, "rollout_slot_transition")
 
 
 def test_cuda_build_flag_is_boolean() -> None:
