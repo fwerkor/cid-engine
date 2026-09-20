@@ -80,6 +80,7 @@ class AsyncPinnedActivationOffloader:
         max_bytes: int,
         min_tensor_bytes: int = 1 << 20,
         prefetch_depth: int = 2,
+        requires_grad_only: bool = False,
     ) -> None:
         self.device = torch.device(device)
         if self.device.type != "cuda":
@@ -95,6 +96,7 @@ class AsyncPinnedActivationOffloader:
         self.max_bytes = int(max_bytes)
         self.min_tensor_bytes = int(min_tensor_bytes)
         self.prefetch_depth = int(prefetch_depth)
+        self.requires_grad_only = bool(requires_grad_only)
         self.d2h_stream = torch.cuda.Stream(device=self.device)
         self.h2d_stream = torch.cuda.Stream(device=self.device)
         self._pool = _PinnedTensorPool()
@@ -141,6 +143,8 @@ class AsyncPinnedActivationOffloader:
         def pack(tensor: Tensor) -> object:
             nonlocal offloaded_bytes
             if tensor.device != self.device:
+                return tensor
+            if self.requires_grad_only and not tensor.requires_grad:
                 return tensor
             if tensor.untyped_storage().data_ptr() in excluded:
                 return tensor
