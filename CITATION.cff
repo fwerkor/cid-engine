@@ -1,0 +1,22 @@
+cff-version: 1.2.0
+message: "If you use CID-Engine in your research, please cite the CID paper."
+title: "CID-Engine"
+type: software
+authors:
+  - family-names: "Cao"
+    given-names: "Yuhang"
+repository-code: "https://github.com/fwerkor/cid-engine"
+url: "https://github.com/fwerkor/cid-engine"
+license: "Apache-2.0"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Cao"
+      given-names: "Yuhang"
+  title: "Continuous Interaction Diffusion: A Diffusion-Native Architecture for Asynchronous Tool-Augmented Reasoning"
+  year: 2026
+  journal: "arXiv"
+  identifiers:
+    - type: doi
+      value: "10.48550/arXiv.2608.10438"
+  url: "https://arxiv.org/abs/2608.10438"

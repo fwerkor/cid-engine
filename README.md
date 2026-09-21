@@ -2,6 +2,8 @@
 
 cid-engine is the native execution engine for Continuous Interaction Diffusion (CID).
 
+Paper: [Continuous Interaction Diffusion](https://arxiv.org/abs/2608.10438)
+
 The engine core is written in C++20. Python is a thin integration surface for the current CID
 model and for semantic-reference tests; it is not the execution core.
 
@@ -175,5 +177,20 @@ scheduler and memory-planner logic.
 5. Overlap model/device work with asynchronous tool/source execution.
 6. Add the Ascend backend behind the same C++ engine interface.
 7. Keep PyTorch as the training/reference frontend until replacing a layer has measured value.
+
+## Citation
+
+If you use CID-Engine in research, please cite the CID paper, which introduces CID and its performance-critical training and inference implementation:
+
+```bibtex
+@article{cao2026continuous,
+  title   = {Continuous Interaction Diffusion: A Diffusion-Native Architecture for Asynchronous Tool-Augmented Reasoning},
+  author  = {Cao, Yuhang},
+  journal = {arXiv preprint arXiv:2608.10438},
+  year    = {2026},
+  doi     = {10.48550/arXiv.2608.10438},
+  url     = {https://arxiv.org/abs/2608.10438}
+}
+```
 
 Apache-2.0, matching the main CID repository.
