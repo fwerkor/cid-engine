@@ -270,8 +270,9 @@ def test_native_ops_are_registered() -> None:
     assert hasattr(torch.ops.cid_engine, "rollout_slot_transition")
 
 
-def test_cuda_build_flag_is_boolean() -> None:
+def test_backend_build_flags_are_boolean() -> None:
     assert isinstance(cid_engine.CUDA_BACKEND_BUILT, bool)
+    assert isinstance(cid_engine.CANN_BACKEND_BUILT, bool)
 
 
 def _statistics_from_logits(

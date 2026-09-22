@@ -16,6 +16,16 @@ def test_classify_attention_backend_prefers_specific_sdpa_kernel() -> None:
         == "flash"
     )
     assert (
+        classify_attention_backend(
+            (
+                "aten::scaled_dot_product_attention",
+                "aclnnFlashAttentionScore",
+                "npu::npu_fusion_attention",
+            )
+        )
+        == "npu-fused"
+    )
+    assert (
         classify_attention_backend(("aten::_scaled_dot_product_efficient_attention",))
         == "memory-efficient"
     )

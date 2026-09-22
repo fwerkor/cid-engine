@@ -7,7 +7,7 @@ from cid_engine.activation_offload import AsyncPinnedActivationOffloader
 
 
 def test_activation_offloader_validates_configuration() -> None:
-    with pytest.raises(ValueError, match="CUDA device"):
+    with pytest.raises(ValueError, match="CUDA or NPU"):
         AsyncPinnedActivationOffloader("cpu", max_bytes=1024)
 
 
