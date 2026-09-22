@@ -7,21 +7,17 @@ import torch
 
 import cid_engine
 from cid_engine import reference
-
-
-def _synchronize(device: torch.device) -> None:
-    if device.type == "cuda":
-        torch.cuda.synchronize(device)
+from cid_engine._accelerator import default_device, synchronize
 
 
 def _time_call(fn, *, device: torch.device, warmup: int, iterations: int) -> float:
     for _ in range(warmup):
         fn()
-    _synchronize(device)
+    synchronize(device)
     started = time.perf_counter()
     for _ in range(iterations):
         fn()
-    _synchronize(device)
+    synchronize(device)
     return (time.perf_counter() - started) * 1000.0 / iterations
 
 
@@ -38,7 +34,7 @@ def _assert_equivalent(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark cid-engine C++ display statistics")
-    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--device", default=str(default_device()))
     parser.add_argument("--batch", type=int, default=1)
     parser.add_argument("--tokens", type=int, default=128)
     parser.add_argument("--vocab", type=int, default=65536)
@@ -47,7 +43,7 @@ def main() -> None:
     args = parser.parse_args()
 
     device = torch.device(args.device)
-    dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
+    dtype = torch.bfloat16 if device.type in {"cuda", "npu"} else torch.float32
     token_ids = torch.randint(
         args.vocab,
         (args.batch, args.tokens),
@@ -64,7 +60,7 @@ def main() -> None:
 
     reference_output = reference.display_token_statistics(token_ids, logits)
     cpp_output = cid_engine.display_token_statistics(token_ids, logits)
-    _synchronize(device)
+    synchronize(device)
     _assert_equivalent(reference_output, cpp_output)
 
     reference_ms = _time_call(

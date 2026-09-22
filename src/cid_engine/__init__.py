@@ -24,6 +24,7 @@ from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
 __version__ = "0.8.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
+CANN_BACKEND_BUILT = bool(_C.cann_backend_built)
 
 
 def live_slot_occupancy(
@@ -203,6 +204,7 @@ __all__ = [
     "LayerActivationPrefetchController",
     "SelectiveCheckpointController",
     "AttentionBackendReport",
+    "CANN_BACKEND_BUILT",
     "CUDA_BACKEND_BUILT",
     "batched_linear_assignment",
     "checkpoint_fraction_for_budget",

@@ -3,10 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
 from torch.nn import Parameter
+
+from cid_engine._accelerator import accelerator_for_device
 
 
 @dataclass(slots=True)
@@ -17,9 +20,9 @@ class _GradientBuffers:
 
 
 class AsyncPinnedGradientAccumulator:
-    """Accumulate CUDA gradients in reusable pinned host buffers.
+    """Accumulate CUDA/NPU gradients in reusable pinned host buffers.
 
-    D2H copies run on a dedicated CUDA stream. After the first contribution for
+    D2H copies run on a dedicated accelerator stream. After the first contribution for
     a parameter, later contributions land in a staging buffer and are folded
     into the persistent host accumulator on one background CPU worker. The
     staging buffer is reused only after that add completes, bounding host memory
@@ -28,14 +31,11 @@ class AsyncPinnedGradientAccumulator:
 
     def __init__(self, device: torch.device | str) -> None:
         self.device = torch.device(device)
-        if self.device.type != "cuda":
-            raise ValueError("async pinned gradient accumulation requires a CUDA device")
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is unavailable")
-        self.copy_stream = torch.cuda.Stream(device=self.device)
+        self.accelerator = accelerator_for_device(self.device)
+        self.copy_stream = self.accelerator.Stream(device=self.device)
         self._buffers: dict[str, _GradientBuffers] = {}
         self._pending_add: Future[None] | None = None
-        self._pending_copy: torch.cuda.Event | None = None
+        self._pending_copy: Any | None = None
         self._executor = ThreadPoolExecutor(
             max_workers=1,
             thread_name_prefix="cid-gradient-stash",
@@ -83,7 +83,7 @@ class AsyncPinnedGradientAccumulator:
 
     def _accumulate_staging(
         self,
-        ready: torch.cuda.Event,
+        ready: Any,
         names: tuple[str, ...],
     ) -> None:
         ready.synchronize()
@@ -96,11 +96,11 @@ class AsyncPinnedGradientAccumulator:
             raise RuntimeError("gradient accumulator is closed")
         self._wait_pending_add()
 
-        current = torch.cuda.current_stream(self.device)
+        current = self.accelerator.current_stream(self.device)
         self.copy_stream.wait_stream(current)
         staged_names: list[str] = []
         copied = False
-        with torch.cuda.stream(self.copy_stream):
+        with self.accelerator.stream(self.copy_stream):
             for name, parameter in parameters:
                 gradient = parameter.grad
                 if gradient is None:
@@ -122,7 +122,7 @@ class AsyncPinnedGradientAccumulator:
 
             if not copied:
                 return
-            ready = torch.cuda.Event()
+            ready = self.accelerator.Event()
             ready.record(self.copy_stream)
 
         self._pending_copy = ready
@@ -145,11 +145,11 @@ class AsyncPinnedGradientAccumulator:
             return
         self.flush()
         parameter_map = dict(parameters)
-        current = torch.cuda.current_stream(self.device)
+        current = self.accelerator.current_stream(self.device)
         self.copy_stream.wait_stream(current)
 
         restored: list[Tensor] = []
-        with torch.cuda.stream(self.copy_stream):
+        with self.accelerator.stream(self.copy_stream):
             for name, buffers in self._buffers.items():
                 if not buffers.initialized:
                     continue
@@ -158,7 +158,7 @@ class AsyncPinnedGradientAccumulator:
                 gradient.copy_(buffers.accumulator, non_blocking=True)
                 parameter.grad = gradient
                 restored.append(gradient)
-            ready = torch.cuda.Event()
+            ready = self.accelerator.Event()
             ready.record(self.copy_stream)
 
         current.wait_event(ready)

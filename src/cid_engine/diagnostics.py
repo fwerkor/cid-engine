@@ -6,6 +6,8 @@ from typing import Any
 
 import torch
 
+from cid_engine._accelerator import accelerator_for_device
+
 
 @dataclass(frozen=True, slots=True)
 class AttentionBackendReport:
@@ -15,6 +17,11 @@ class AttentionBackendReport:
 
 def classify_attention_backend(events: tuple[str, ...] | list[str] | set[str]) -> str:
     names = tuple(str(event).lower() for event in events)
+    if any(
+        "aclnnflashattentionscore" in name or "npu_fusion_attention" in name
+        for name in names
+    ):
+        return "npu-fused"
     if any("flash_attention" in name for name in names):
         return "flash"
     if any("efficient_attention" in name for name in names):
@@ -48,16 +55,20 @@ def profile_attention_backend(
     resolved = torch.device(device) if device is not None else None
     for _ in range(warmup):
         fn()
-    if resolved is not None and resolved.type == "cuda":
-        torch.cuda.synchronize(resolved)
+    if resolved is not None and resolved.type in {"cuda", "npu"}:
+        accelerator_for_device(resolved).synchronize(resolved)
 
     activities = [torch.profiler.ProfilerActivity.CPU]
     if resolved is not None and resolved.type == "cuda":
         activities.append(torch.profiler.ProfilerActivity.CUDA)
+    elif resolved is not None and resolved.type == "npu":
+        npu_activity = getattr(torch.profiler.ProfilerActivity, "NPU", None)
+        if npu_activity is not None:
+            activities.append(npu_activity)
     with torch.profiler.profile(activities=activities) as profiler:
         fn()
-    if resolved is not None and resolved.type == "cuda":
-        torch.cuda.synchronize(resolved)
+    if resolved is not None and resolved.type in {"cuda", "npu"}:
+        accelerator_for_device(resolved).synchronize(resolved)
 
     events = tuple(sorted({event.key for event in profiler.key_averages()}))
     return AttentionBackendReport(

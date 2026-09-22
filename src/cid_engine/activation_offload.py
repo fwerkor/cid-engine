@@ -4,15 +4,18 @@ from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from torch import Tensor
+
+from cid_engine._accelerator import accelerator_for_device
 
 
 @dataclass(slots=True)
 class _PoolEntry:
     tensor: Tensor
-    ready: torch.cuda.Event | None = None
+    ready: Any | None = None
 
 
 class _PinnedTensorPool:
@@ -59,7 +62,7 @@ class _PinnedTensorPool:
         self.allocated_bytes += tensor.numel() * tensor.element_size()
         return tensor
 
-    def release(self, tensor: Tensor, ready: torch.cuda.Event | None = None) -> None:
+    def release(self, tensor: Tensor, ready: Any | None = None) -> None:
         key = self._key(
             dtype=tensor.dtype,
             size=tuple(tensor.size()),
@@ -72,16 +75,16 @@ class _PinnedTensorPool:
 class _OffloadedActivation:
     cpu_tensor: Tensor
     device: torch.device
-    d2h_ready: torch.cuda.Event
+    d2h_ready: Any
     index: int
     restored: Tensor | None = None
-    h2d_ready: torch.cuda.Event | None = None
-    reuse_ready: torch.cuda.Event | None = None
+    h2d_ready: Any | None = None
+    reuse_ready: Any | None = None
     layer_index: int | None = None
 
 
 class AsyncPinnedActivationOffloader:
-    """Offload saved CUDA activations through pinned host memory and prefetch backward use."""
+    """Offload saved CUDA/NPU activations through pinned host memory and prefetch backward use."""
 
     def __init__(
         self,
@@ -93,10 +96,7 @@ class AsyncPinnedActivationOffloader:
         requires_grad_only: bool = False,
     ) -> None:
         self.device = torch.device(device)
-        if self.device.type != "cuda":
-            raise ValueError("activation offload requires a CUDA device")
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is unavailable")
+        self.accelerator = accelerator_for_device(self.device)
         if max_bytes <= 0:
             raise ValueError("max_bytes must be positive")
         if min_tensor_bytes <= 0:
@@ -107,8 +107,8 @@ class AsyncPinnedActivationOffloader:
         self.min_tensor_bytes = int(min_tensor_bytes)
         self.prefetch_depth = int(prefetch_depth)
         self.requires_grad_only = bool(requires_grad_only)
-        self.d2h_stream = torch.cuda.Stream(device=self.device)
-        self.h2d_stream = torch.cuda.Stream(device=self.device)
+        self.d2h_stream = self.accelerator.Stream(device=self.device)
+        self.h2d_stream = self.accelerator.Stream(device=self.device)
         self._pool = _PinnedTensorPool()
         self.last_offloaded_bytes = 0
         self.last_offloaded_tensors = 0
@@ -147,10 +147,16 @@ class AsyncPinnedActivationOffloader:
             dtype=handle.cpu_tensor.dtype,
             device=handle.device,
         )
-        with torch.cuda.stream(self.h2d_stream):
+        if handle.device.type == "npu":
+            # torch_npu 2.7/CANN 8.3 does not reliably make completed D2H host
+            # writes visible to a dependent H2D copy through a device event
+            # alone. Defer the host wait until the activation is actually
+            # prefetched so forward D2H transfers can still overlap compute.
+            handle.d2h_ready.synchronize()
+        with self.accelerator.stream(self.h2d_stream):
             self.h2d_stream.wait_event(handle.d2h_ready)
             restored.copy_(handle.cpu_tensor, non_blocking=True)
-            ready = torch.cuda.Event()
+            ready = self.accelerator.Event()
             ready.record(self.h2d_stream)
         handle.restored = restored
         handle.h2d_ready = ready
@@ -191,12 +197,12 @@ class AsyncPinnedActivationOffloader:
                 return tensor
 
             cpu_tensor = self._pool.acquire(tensor)
-            current = torch.cuda.current_stream(self.device)
+            current = self.accelerator.current_stream(self.device)
             self.d2h_stream.wait_stream(current)
-            with torch.cuda.stream(self.d2h_stream):
+            with self.accelerator.stream(self.d2h_stream):
                 cpu_tensor.copy_(tensor.detach(), non_blocking=True)
                 tensor.record_stream(self.d2h_stream)
-                ready = torch.cuda.Event()
+                ready = self.accelerator.Event()
                 ready.record(self.d2h_stream)
             handle = _OffloadedActivation(
                 cpu_tensor=cpu_tensor,
@@ -224,7 +230,7 @@ class AsyncPinnedActivationOffloader:
                 self._prefetch(handles[index])
             assert packed.restored is not None
             assert packed.h2d_ready is not None
-            current = torch.cuda.current_stream(self.device)
+            current = self.accelerator.current_stream(self.device)
             current.wait_event(packed.h2d_ready)
             restored = packed.restored
             restored.record_stream(current)

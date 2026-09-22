@@ -8,6 +8,16 @@ from torch.utils.cpp_extension import (
 )
 
 with_cuda = torch.version.cuda is not None and CUDA_HOME is not None
+with_cann = False
+NpuExtension = None
+if not with_cuda:
+    try:
+        import torch_npu  # noqa: F401
+        from torch_npu.utils.cpp_extension import NpuExtension
+
+        with_cann = hasattr(torch, "npu")
+    except ImportError:
+        pass
 
 sources = [
     "csrc/ops.cpp",
@@ -28,6 +38,8 @@ if with_cuda:
             "csrc/cuda/rollout_state.cu",
         ]
     )
+elif with_cann:
+    sources.append("csrc/cann/registration.cpp")
 
 compile_args = {"cxx": ["-O3", "-std=c++20"]}
 if with_cuda:
@@ -37,8 +49,16 @@ if with_cuda:
         "-std=c++20",
         "--expt-relaxed-constexpr",
     ]
+elif with_cann:
+    compile_args["cxx"].append("-DCID_ENGINE_WITH_CANN=1")
 
-extension = CUDAExtension if with_cuda else CppExtension
+if with_cuda:
+    extension = CUDAExtension
+elif with_cann:
+    assert NpuExtension is not None
+    extension = NpuExtension
+else:
+    extension = CppExtension
 
 setup(
     ext_modules=[

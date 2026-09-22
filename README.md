@@ -15,13 +15,20 @@ PyPI releases can be installed with:
 
 The current PyPI distribution is source-based so that installation can select the correct native
 backend for the target machine. A C++20 compiler is required. If the installed PyTorch build has
-CUDA support and `CUDA_HOME` points to a CUDA toolkit, the CUDA backend is built automatically;
-otherwise cid-engine builds its CPU backend.
+CUDA support and `CUDA_HOME` points to a CUDA toolkit, the CUDA backend is built automatically.
+On Ascend systems with `torch_npu` installed, cid-engine builds its CANN backend and registers the
+same operators on PyTorch's NPU/PrivateUse1 dispatch key. Otherwise cid-engine builds its CPU
+backend.
 
 For an environment that already pins a particular PyTorch build, install against that exact local
 PyTorch ABI with:
 
     pip install cid-engine --no-build-isolation
+
+Ascend builds require this non-isolated form: install a matching `torch` + `torch_npu` pair and
+source the CANN environment first, then install cid-engine with `--no-build-isolation`. A generic
+PEP 517 build-isolation environment does not contain `torch_npu` and would therefore select the
+CPU backend.
 
 ## Architecture
 
@@ -38,7 +45,7 @@ PyTorch ABI with:
               |
               +---- CPU
               +---- CUDA       (display, allocation, and materialization kernels)
-              +---- Ascend     (planned)
+              +---- Ascend/CANN (torch_npu / PrivateUse1)
 
 The current C++ core owns CID-specific tensor primitives and the post-statistics display refinement policy:
 
@@ -143,15 +150,16 @@ execution scheduler without changing the optimization objective:
 - `shard_frozen_transformer` FULL_SHARDs immutable transformer blocks and overlaps layer
   materialization with compute, while leaving directly accessed embeddings resident;
 - `AsyncPinnedActivationOffloader` moves selected saved activations through reusable pinned host
-  buffers on dedicated CUDA streams; `LayerActivationPrefetchController` tags activations by
+  buffers on dedicated CUDA or NPU streams; `LayerActivationPrefetchController` tags activations by
   transformer layer and starts H2D restoration before each layer backward;
 - `SelectiveCheckpointController` checkpoints only a deterministic subset of transformer layers,
   with `checkpoint_fraction_for_budget` converting an activation-memory budget into a layer
   fraction;
 - `AsyncBucketedGradientReducer` launches deterministic gradient all-reduces as buckets become
   ready during the final accumulation backward, overlapping communication with remaining compute;
-- `profile_attention_backend` reports the actual SDPA backend used by a model path so Flash,
-  memory-efficient, math, and eager fallbacks can be distinguished before adding custom kernels.
+- `profile_attention_backend` reports the actual SDPA backend used by a model path so CUDA Flash,
+  Ascend fused attention, memory-efficient, math, and eager fallbacks can be distinguished before
+  adding custom kernels.
 
 These primitives retain PyTorch autograd and distributed collectives as the semantic reference;
 they optimize storage, transfer scheduling, communication overlap, and rematerialization rather
@@ -160,12 +168,13 @@ than changing model math.
 ## Benchmark
 
     cid-engine-bench --device cuda --batch 1 --tokens 128 --vocab 65536
+    cid-engine-bench --device npu --batch 1 --tokens 128 --vocab 65536
 
 The benchmark verifies C++/reference equivalence before reporting timing.
 
 Moving Python tensor expressions into C++ does not by itself guarantee a speedup. If C++ launches
 the same sequence of ATen kernels, device work is essentially unchanged. Establishing the native
-core first gives CID a stable place for fused CUDA, CPU, and Ascend implementations and for future
+core first gives CID a stable place for fused CUDA, CPU, and CANN implementations and for future
 scheduler and memory-planner logic.
 
 ## Roadmap
@@ -175,7 +184,7 @@ scheduler and memory-planner logic.
 3. Expand fused CUDA coverage only where profiling shows a material gain.
 4. Add CID-aware buffer lifetime and stream scheduling.
 5. Overlap model/device work with asynchronous tool/source execution.
-6. Add the Ascend backend behind the same C++ engine interface.
+6. Replace profiled CANN ATen hot paths with fused Ascend kernels where they materially improve throughput.
 7. Keep PyTorch as the training/reference frontend until replacing a layer has measured value.
 
 ## Citation
