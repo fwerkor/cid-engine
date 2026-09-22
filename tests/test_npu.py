@@ -27,15 +27,30 @@ def test_cann_backend_build_flag_is_enabled() -> None:
     assert cid_engine.CANN_BACKEND_BUILT
 
 
-def test_npu_display_statistics_matches_reference() -> None:
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_npu_display_statistics_matches_reference(dtype: torch.dtype) -> None:
     device = _device()
-    token_ids = torch.tensor([[1, 3, 2, 0]], device=device, dtype=torch.long)
-    logits = torch.randn(1, 4, 17, device=device, dtype=torch.float32)
-    expected = reference.display_token_statistics(token_ids, logits)
-    actual = cid_engine.display_token_statistics(token_ids, logits)
+    token_ids_cpu = torch.tensor([[1, 3, 2, 0]], dtype=torch.long)
+    logits_cpu = torch.randn(1, 4, 17, dtype=dtype)
+    expected = reference.display_token_statistics(token_ids_cpu, logits_cpu)
+    actual = cid_engine.display_token_statistics(
+        token_ids_cpu.to(device),
+        logits_cpu.to(device),
+    )
     torch.npu.synchronize(device)
-    for candidate, oracle in zip(actual, expected, strict=True):
-        torch.testing.assert_close(candidate.cpu(), oracle.cpu(), rtol=2e-5, atol=2e-6)
+    torch.testing.assert_close(actual[1].cpu(), expected[1], rtol=0, atol=0)
+    torch.testing.assert_close(actual[0].cpu(), expected[0], rtol=2e-5, atol=2e-6)
+    torch.testing.assert_close(actual[2].cpu(), expected[2], rtol=2e-5, atol=2e-6)
+
+
+def test_npu_display_statistics_preserves_float32_near_tie_argmax() -> None:
+    device = _device()
+    token_ids = torch.tensor([[0]], device=device, dtype=torch.long)
+    logits = torch.tensor([[[0.0, 1.0e-8]]], device=device, dtype=torch.float32)
+
+    _, predicted, _ = cid_engine.display_token_statistics(token_ids, logits)
+
+    assert predicted.item() == 1
 
 
 def test_npu_training_primitives_stay_on_device() -> None:

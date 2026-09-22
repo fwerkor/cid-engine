@@ -39,7 +39,13 @@ if with_cuda:
         ]
     )
 elif with_cann:
-    sources.append("csrc/cann/registration.cpp")
+    sources.extend(
+        [
+            "csrc/cann/registration.cpp",
+            "csrc/cann/display_stats.cpp",
+            "csrc/cann/materialize_snapshot.cpp",
+        ]
+    )
 
 compile_args = {"cxx": ["-O3", "-std=c++20"]}
 if with_cuda:
