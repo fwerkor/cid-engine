@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from importlib.metadata import version
+
 import pytest
 import torch
 
 import cid_engine
 from cid_engine import reference
+
+
+def test_runtime_version_matches_distribution_metadata() -> None:
+    assert cid_engine.__version__ == version("cid-engine")
 
 
 def test_display_statistics_matches_reference() -> None:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from importlib.metadata import version as distribution_version
+
 import torch
 from torch import Tensor
 
@@ -22,7 +24,7 @@ from cid_engine.frozen_shard import shard_frozen_transformer
 from cid_engine.gradient_reduce import AsyncBucketedGradientReducer
 from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
-__version__ = "0.8.0"
+__version__ = distribution_version("cid-engine")
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 CANN_BACKEND_BUILT = bool(_C.cann_backend_built)
 
