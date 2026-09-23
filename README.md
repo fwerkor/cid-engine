@@ -75,6 +75,17 @@ that invariant when constructing the display tensor, avoiding a device-to-host s
 Quantization, skipped diffusion steps, approximate attention, speculative execution, or new
 early-exit policies are outside this contract.
 
+### 1.x compatibility
+
+CID-Engine 1.x treats the documented Python API, registered `torch.ops.cid_engine` operators, and
+the semantic contract above as stable. Patch and minor releases may add compatible operators,
+backends, optimizations, diagnostics, and optional arguments, but will not intentionally remove or
+change existing public behavior. A change that requires callers to update code or changes a
+model-visible CID decision requires a new major version.
+
+Backend-specific implementation details, performance characteristics, build-toolchain internals,
+and modules explicitly documented as reference/testing helpers are not compatibility guarantees.
+
 ## Build
 
 A C++20 compiler and PyTorch/LibTorch are required.
