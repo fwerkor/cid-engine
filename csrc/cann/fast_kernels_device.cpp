@@ -178,3 +178,224 @@ extern "C" __global__ __aicore__ void cid_masked_diffusion_f32_kernel(
           static_cast<float>(batch * tokens));
   metrics.SetValue(1, ratio_sum / static_cast<float>(batch));
 }
+
+__aicore__ inline std::int64_t cid_display_replacement_token(
+    const std::int64_t token,
+    const std::int64_t offset,
+    const std::int64_t vocab_size,
+    const std::int64_t mask_token_id,
+    const std::int64_t eos_token_id,
+    const bool has_eos) {
+  std::int64_t replacement = (token + offset) % vocab_size;
+  for (int iteration = 0; iteration < 3; ++iteration) {
+    const bool forbidden =
+        replacement == mask_token_id ||
+        replacement == token ||
+        (has_eos && replacement == eos_token_id);
+    if (forbidden) {
+      replacement = (replacement + 1) % vocab_size;
+    }
+  }
+  return replacement;
+}
+
+template <bool UseReplacement>
+__aicore__ inline void cid_display_corrupt_impl(
+    GM_ADDR token_ids_address,
+    GM_ADDR timesteps_address,
+    GM_ADDR eligible_address,
+    GM_ADDR corruption_random_address,
+    GM_ADDR replacement_random_address,
+    GM_ADDR replacement_offsets_address,
+    GM_ADDR corrupted_address,
+    GM_ADDR labels_address,
+    GM_ADDR masked_address,
+    GM_ADDR replaced_address,
+    const std::int64_t batch,
+    const std::int64_t tokens,
+    const std::int64_t mask_token_id,
+    const std::int64_t eos_token_id,
+    const bool has_eos,
+    const std::int64_t vocab_size,
+    const float replacement_fraction) {
+  if (AscendC::GetBlockIdx() != 0) {
+    return;
+  }
+
+  AscendC::GlobalTensor<std::int64_t> token_ids;
+  AscendC::GlobalTensor<float> timesteps;
+  AscendC::GlobalTensor<bool> eligible;
+  AscendC::GlobalTensor<float> corruption_random;
+  AscendC::GlobalTensor<float> replacement_random;
+  AscendC::GlobalTensor<std::int64_t> replacement_offsets;
+  AscendC::GlobalTensor<std::int64_t> corrupted;
+  AscendC::GlobalTensor<std::int64_t> labels;
+  AscendC::GlobalTensor<bool> masked;
+  AscendC::GlobalTensor<bool> replaced;
+
+  token_ids.SetGlobalBuffer((__gm__ std::int64_t*)token_ids_address);
+  timesteps.SetGlobalBuffer((__gm__ float*)timesteps_address);
+  eligible.SetGlobalBuffer((__gm__ bool*)eligible_address);
+  corruption_random.SetGlobalBuffer((__gm__ float*)corruption_random_address);
+  if constexpr (UseReplacement) {
+    replacement_random.SetGlobalBuffer(
+        (__gm__ float*)replacement_random_address);
+    replacement_offsets.SetGlobalBuffer(
+        (__gm__ std::int64_t*)replacement_offsets_address);
+  }
+  corrupted.SetGlobalBuffer((__gm__ std::int64_t*)corrupted_address);
+  labels.SetGlobalBuffer((__gm__ std::int64_t*)labels_address);
+  masked.SetGlobalBuffer((__gm__ bool*)masked_address);
+  replaced.SetGlobalBuffer((__gm__ bool*)replaced_address);
+
+  for (std::int64_t row = 0; row < batch; ++row) {
+    const std::int64_t base = row * tokens;
+    const float timestep = timesteps.GetValue(row);
+    std::int64_t first_eligible = -1;
+    std::int64_t selected_count = 0;
+
+    for (std::int64_t column = 0; column < tokens; ++column) {
+      const std::int64_t index = base + column;
+      const bool can_corrupt = eligible.GetValue(index);
+      if (can_corrupt && first_eligible < 0) {
+        first_eligible = column;
+      }
+
+      const bool selected =
+          can_corrupt && corruption_random.GetValue(index) < timestep;
+      selected_count += selected ? 1 : 0;
+
+      bool replace = false;
+      if constexpr (UseReplacement) {
+        replace =
+            selected &&
+            replacement_random.GetValue(index) < replacement_fraction;
+      }
+      const bool mask = selected && !replace;
+
+      masked.SetValue(index, mask);
+      replaced.SetValue(index, replace);
+      const std::int64_t token = token_ids.GetValue(index);
+      labels.SetValue(index, selected ? token : -100);
+
+      if (mask) {
+        corrupted.SetValue(index, mask_token_id);
+      } else if constexpr (UseReplacement) {
+        if (replace) {
+          corrupted.SetValue(
+              index,
+              cid_display_replacement_token(
+                  token,
+                  replacement_offsets.GetValue(index),
+                  vocab_size,
+                  mask_token_id,
+                  eos_token_id,
+                  has_eos));
+        } else {
+          corrupted.SetValue(index, token);
+        }
+      } else {
+        corrupted.SetValue(index, token);
+      }
+    }
+
+    if (selected_count == 0 && timestep > 0.0F && first_eligible >= 0) {
+      const std::int64_t index = base + first_eligible;
+      const std::int64_t token = token_ids.GetValue(index);
+      bool replace = false;
+      if constexpr (UseReplacement) {
+        replace = replacement_random.GetValue(index) < replacement_fraction;
+      }
+      replaced.SetValue(index, replace);
+      masked.SetValue(index, !replace);
+      labels.SetValue(index, token);
+      if constexpr (UseReplacement) {
+        if (replace) {
+          corrupted.SetValue(
+              index,
+              cid_display_replacement_token(
+                  token,
+                  replacement_offsets.GetValue(index),
+                  vocab_size,
+                  mask_token_id,
+                  eos_token_id,
+                  has_eos));
+        } else {
+          corrupted.SetValue(index, mask_token_id);
+        }
+      } else {
+        corrupted.SetValue(index, mask_token_id);
+      }
+    }
+  }
+}
+
+extern "C" __global__ __aicore__ void cid_display_corrupt_mask_kernel(
+    GM_ADDR token_ids_address,
+    GM_ADDR timesteps_address,
+    GM_ADDR eligible_address,
+    GM_ADDR corruption_random_address,
+    GM_ADDR corrupted_address,
+    GM_ADDR labels_address,
+    GM_ADDR masked_address,
+    GM_ADDR replaced_address,
+    const std::int64_t batch,
+    const std::int64_t tokens,
+    const std::int64_t mask_token_id) {
+  cid_display_corrupt_impl<false>(
+      token_ids_address,
+      timesteps_address,
+      eligible_address,
+      corruption_random_address,
+      nullptr,
+      nullptr,
+      corrupted_address,
+      labels_address,
+      masked_address,
+      replaced_address,
+      batch,
+      tokens,
+      mask_token_id,
+      -1,
+      false,
+      0,
+      0.0F);
+}
+
+extern "C" __global__ __aicore__ void cid_display_corrupt_replace_kernel(
+    GM_ADDR token_ids_address,
+    GM_ADDR timesteps_address,
+    GM_ADDR eligible_address,
+    GM_ADDR corruption_random_address,
+    GM_ADDR replacement_random_address,
+    GM_ADDR replacement_offsets_address,
+    GM_ADDR corrupted_address,
+    GM_ADDR labels_address,
+    GM_ADDR masked_address,
+    GM_ADDR replaced_address,
+    const std::int64_t batch,
+    const std::int64_t tokens,
+    const std::int64_t mask_token_id,
+    const std::int64_t eos_token_id,
+    const bool has_eos,
+    const std::int64_t vocab_size,
+    const float replacement_fraction) {
+  cid_display_corrupt_impl<true>(
+      token_ids_address,
+      timesteps_address,
+      eligible_address,
+      corruption_random_address,
+      replacement_random_address,
+      replacement_offsets_address,
+      corrupted_address,
+      labels_address,
+      masked_address,
+      replaced_address,
+      batch,
+      tokens,
+      mask_token_id,
+      eos_token_id,
+      has_eos,
+      vocab_size,
+      replacement_fraction);
+}

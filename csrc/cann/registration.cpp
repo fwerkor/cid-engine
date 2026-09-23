@@ -12,9 +12,6 @@ TORCH_LIBRARY_IMPL(cid_engine, PrivateUse1, m) {
       "thought_corrupt_from_epsilon",
       TORCH_FN(cid::engine::thought_corrupt_from_epsilon));
   m.impl(
-      "display_corrupt_from_random",
-      TORCH_FN(cid::engine::display_corrupt_from_random));
-  m.impl(
       "refine_display_from_statistics",
       TORCH_FN(cid::engine::refine_display_from_statistics));
 }

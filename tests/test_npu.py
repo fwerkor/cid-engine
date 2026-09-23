@@ -222,6 +222,76 @@ def test_npu_slot_state_ops_match_cpu_reference() -> None:
         torch.testing.assert_close(candidate.cpu(), oracle, rtol=2e-5, atol=2e-6)
 
 
+@pytest.mark.parametrize(
+    ("shape", "replacement_fraction"),
+    [
+        ((1, 128), 0.25),
+        ((4, 257), 1.0),
+        ((8, 2048), 0.25),
+    ],
+)
+def test_npu_display_corruption_hybrid_path_matches_reference(
+    shape: tuple[int, int],
+    replacement_fraction: float,
+) -> None:
+    device = _device()
+    batch, tokens = shape
+    generator = torch.Generator().manual_seed(811 + batch + tokens)
+    token_ids = torch.randint(
+        3,
+        32000,
+        shape,
+        generator=generator,
+        dtype=torch.long,
+    )
+    timesteps = torch.rand(batch, generator=generator)
+    eligible = torch.rand(shape, generator=generator) > 0.2
+    corruption_random = torch.rand(
+        shape,
+        generator=generator,
+        dtype=torch.bfloat16,
+    )
+    replacement_random = torch.rand(
+        shape,
+        generator=generator,
+        dtype=torch.bfloat16,
+    )
+    replacement_offsets = torch.randint(
+        1,
+        32000,
+        shape,
+        generator=generator,
+        dtype=torch.long,
+    )
+    expected = reference.display_corrupt_from_random(
+        token_ids,
+        timesteps,
+        eligible,
+        corruption_random,
+        replacement_random,
+        replacement_offsets,
+        mask_token_id=31999,
+        eos_token_id=2,
+        vocab_size=32000,
+        replacement_fraction=replacement_fraction,
+    )
+    actual = cid_engine.display_corrupt_from_random(
+        token_ids.to(device),
+        timesteps.to(device),
+        eligible.to(device),
+        corruption_random.to(device),
+        replacement_random.to(device),
+        replacement_offsets.to(device),
+        mask_token_id=31999,
+        eos_token_id=2,
+        vocab_size=32000,
+        replacement_fraction=replacement_fraction,
+    )
+    torch.npu.synchronize(device)
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(candidate.cpu(), oracle, rtol=0, atol=0)
+
+
 def test_npu_corruption_ops_match_cpu_reference() -> None:
     device = _device()
     generator = torch.Generator().manual_seed(194)
