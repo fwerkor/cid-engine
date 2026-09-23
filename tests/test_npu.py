@@ -82,6 +82,84 @@ def test_npu_training_primitives_stay_on_device() -> None:
     assert (allocation.sum(dim=1) <= 3).all().item()
 
 
+@pytest.mark.parametrize("batch, size", [(1, 8), (17, 8), (32, 16)])
+def test_npu_linear_assignment_fast_path_matches_reference(
+    batch: int,
+    size: int,
+) -> None:
+    device = _device()
+    generator = torch.Generator().manual_seed(1931 + batch + size)
+    costs = torch.randn(batch, size, size, generator=generator)
+    row_counts = torch.randint(
+        0,
+        size + 1,
+        (batch,),
+        generator=generator,
+        dtype=torch.long,
+    )
+    expected = reference.batched_linear_assignment(costs, row_counts)
+    actual = cid_engine.batched_linear_assignment(
+        costs.to(device),
+        row_counts.to(device),
+    )
+    torch.npu.synchronize(device)
+    torch.testing.assert_close(actual.cpu(), expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [(4, 257), (8, 1024), (16, 2048)],
+)
+def test_npu_masked_diffusion_hybrid_path_matches_reference(
+    shape: tuple[int, int],
+) -> None:
+    device = _device()
+    batch, tokens = shape
+    generator = torch.Generator().manual_seed(2718 + batch + tokens)
+    clean_ids = torch.randint(
+        0,
+        4096,
+        shape,
+        generator=generator,
+        dtype=torch.long,
+    )
+    ratio_random = torch.rand(
+        batch,
+        1,
+        generator=generator,
+        dtype=torch.bfloat16,
+    )
+    mask_random = torch.rand(
+        shape,
+        generator=generator,
+        dtype=torch.bfloat16,
+    )
+    expected = reference.masked_diffusion_corrupt_from_random(
+        clean_ids,
+        ratio_random,
+        mask_random,
+        mask_token_id=4095,
+        min_mask_ratio=0.02,
+        max_mask_ratio=0.8,
+    )
+    actual = cid_engine.masked_diffusion_corrupt_from_random(
+        clean_ids.to(device),
+        ratio_random.to(device),
+        mask_random.to(device),
+        mask_token_id=4095,
+        min_mask_ratio=0.02,
+        max_mask_ratio=0.8,
+    )
+    torch.npu.synchronize(device)
+    for candidate, oracle in zip(actual, expected, strict=True):
+        torch.testing.assert_close(
+            candidate.cpu(),
+            oracle,
+            rtol=2e-5 if candidate.is_floating_point() else 0,
+            atol=2e-6 if candidate.is_floating_point() else 0,
+        )
+
+
 def test_npu_linear_assignment_roundtrip_is_semantically_correct() -> None:
     device = _device()
     costs = torch.tensor(

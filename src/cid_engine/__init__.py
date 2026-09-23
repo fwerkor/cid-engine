@@ -26,6 +26,14 @@ __version__ = "0.8.0"
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
 CANN_BACKEND_BUILT = bool(_C.cann_backend_built)
 
+if CANN_BACKEND_BUILT:
+    from pathlib import Path
+
+    _cann_fast_libraries = tuple(Path(__file__).parent.glob("_C_cann_fast*.so"))
+    if len(_cann_fast_libraries) != 1:
+        raise ImportError("CANN fast-kernel library is missing or ambiguous")
+    torch.ops.load_library(str(_cann_fast_libraries[0]))
+
 
 def live_slot_occupancy(
     slot_occupancy: Tensor,
