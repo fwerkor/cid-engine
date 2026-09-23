@@ -128,6 +128,7 @@ if not with_cuda:
 
 sources = [
     "csrc/ops.cpp",
+    "csrc/cpu/display_stats.cpp",
     "csrc/refine.cpp",
     "csrc/registration.cpp",
     "csrc/bindings.cpp",
@@ -154,7 +155,11 @@ elif with_cann:
         ]
     )
 
-compile_args = {"cxx": ["-O3", "-std=c++20"]}
+# PyPI publishes an sdist, so the native extension is compiled on the target
+# host. Keep the CPU path vectorized and threaded even when CUDA/CANN support
+# is built into the same extension.
+compile_args = {"cxx": ["-O3", "-std=c++20", "-march=native", "-fopenmp"]}
+link_args = ["-fopenmp"]
 if with_cuda:
     compile_args["cxx"].append("-DCID_ENGINE_WITH_CUDA=1")
     compile_args["nvcc"] = [
@@ -179,6 +184,7 @@ ext_modules = [
         sources=sources,
         include_dirs=["csrc/include"],
         extra_compile_args=compile_args,
+        extra_link_args=link_args,
     )
 ]
 if with_cann:

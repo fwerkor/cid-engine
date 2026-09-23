@@ -173,9 +173,14 @@ than changing model math.
 The benchmark verifies C++/reference equivalence before reporting timing.
 
 Moving Python tensor expressions into C++ does not by itself guarantee a speedup. If C++ launches
-the same sequence of ATen kernels, device work is essentially unchanged. Establishing the native
-core first gives CID a stable place for fused CUDA, CPU, and CANN implementations and for future
-scheduler and memory-planner logic.
+the same sequence of ATen kernels, device work is essentially unchanged. The CPU backend therefore
+uses a fused display-statistics path that reuses ATen's optimized max/argmax reduction while
+computing only the two probabilities CID needs, avoiding materialization of the full softmax tensor.
+Source builds enable the target CPU ISA and OpenMP so this path remains vectorized and threaded even
+when CUDA or CANN support is compiled into the same extension.
+
+Establishing the native core first gives CID a stable place for fused CUDA, CPU, and CANN
+implementations and for future scheduler and memory-planner logic.
 
 ## Roadmap
 

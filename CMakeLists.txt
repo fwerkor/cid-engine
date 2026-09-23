@@ -3,11 +3,21 @@ project(cid_engine LANGUAGES CXX)
 
 find_package(Torch REQUIRED)
 
-add_library(cid_engine_core STATIC csrc/ops.cpp csrc/refine.cpp)
+add_library(
+  cid_engine_core STATIC
+  csrc/ops.cpp
+  csrc/cpu/display_stats.cpp
+  csrc/refine.cpp
+)
 target_include_directories(cid_engine_core PUBLIC csrc/include)
 target_link_libraries(cid_engine_core PUBLIC "${TORCH_LIBRARIES}")
 target_compile_features(cid_engine_core PUBLIC cxx_std_20)
 set_target_properties(cid_engine_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT MSVC)
+  find_package(OpenMP REQUIRED)
+  target_compile_options(cid_engine_core PRIVATE -O3 -march=native)
+  target_link_libraries(cid_engine_core PUBLIC OpenMP::OpenMP_CXX)
+endif()
 
 option(CID_ENGINE_BUILD_TESTS "Build native C++ tests" ON)
 if(CID_ENGINE_BUILD_TESTS)

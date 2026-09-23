@@ -72,6 +72,10 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& logits);
 
+std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics_cpu(
+    const at::Tensor& token_ids,
+    const at::Tensor& logits);
+
 at::Tensor refine_display_from_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& confidence,
