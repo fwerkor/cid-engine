@@ -308,6 +308,49 @@ def display_token_statistics(
     return confidence, predicted, current_confidence
 
 
+def display_token_statistics_with_repetition(
+    token_ids: Tensor,
+    logits: Tensor,
+    mask_token_id: int,
+    eos_token_id: int | None,
+    repetition_score_multiplier: float = 0.7,
+) -> tuple[Tensor, Tensor, Tensor]:
+    if not 0.0 < repetition_score_multiplier <= 1.0:
+        raise ValueError("repetition_score_multiplier must be in (0, 1]")
+    adjusted = logits.float().clone()
+    if repetition_score_multiplier < 1.0 and token_ids.shape[1] > 1:
+        log_multiplier = math.log(repetition_score_multiplier)
+        for batch_index in range(token_ids.shape[0]):
+            row = token_ids[batch_index]
+            for position in range(token_ids.shape[1]):
+                adjacent_runs: dict[int, int] = {}
+                if position > 0:
+                    repeated_id = int(row[position - 1])
+                    if repeated_id != mask_token_id and repeated_id != eos_token_id:
+                        exponent = 1
+                        cursor = position - 2
+                        while cursor >= 0 and int(row[cursor]) == repeated_id:
+                            exponent += 1
+                            cursor -= 1
+                        adjacent_runs[repeated_id] = exponent
+                if position + 1 < row.numel():
+                    repeated_id = int(row[position + 1])
+                    if repeated_id != mask_token_id and repeated_id != eos_token_id:
+                        exponent = 1
+                        cursor = position + 2
+                        while cursor < row.numel() and int(row[cursor]) == repeated_id:
+                            exponent += 1
+                            cursor += 1
+                        adjacent_runs[repeated_id] = (
+                            adjacent_runs.get(repeated_id, 0) + exponent
+                        )
+                for repeated_id, exponent in adjacent_runs.items():
+                    adjusted[batch_index, position, repeated_id] += (
+                        float(exponent) * log_multiplier
+                    )
+    return display_token_statistics(token_ids, adjusted)
+
+
 def _structural_display_edit(
     token_ids: Tensor,
     predicted: Tensor,

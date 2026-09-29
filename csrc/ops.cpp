@@ -2,7 +2,10 @@
 
 #include <ATen/Functions.h>
 
+#include <cmath>
 #include <limits>
+#include <utility>
+#include <vector>
 
 namespace cid::engine {
 
@@ -468,6 +471,84 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
   auto current_confidence =
       at::exp(current_logits - max_logits - log_normalizer);
   return {confidence, predicted, current_confidence};
+}
+
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor>
+display_token_statistics_with_repetition(
+    const at::Tensor& token_ids,
+    const at::Tensor& logits,
+    const std::int64_t mask_token_id,
+    const std::optional<std::int64_t>& eos_token_id,
+    const double repetition_score_multiplier) {
+  TORCH_CHECK(
+      repetition_score_multiplier > 0.0 && repetition_score_multiplier <= 1.0,
+      "repetition_score_multiplier must be in (0, 1]");
+  TORCH_CHECK(token_ids.dim() == 2, "token_ids must have shape [batch, tokens]");
+  TORCH_CHECK(
+      logits.dim() == 3 &&
+          logits.size(0) == token_ids.size(0) &&
+          logits.size(1) == token_ids.size(1),
+      "logits must have shape [batch, tokens, vocab]");
+
+  if (repetition_score_multiplier == 1.0 || token_ids.size(1) <= 1) {
+    return display_token_statistics(token_ids, logits);
+  }
+
+  auto adjusted = logits.to(at::kFloat).clone();
+  const double log_multiplier = std::log(repetition_score_multiplier);
+  auto ids_cpu = token_ids.to(at::kCPU).contiguous();
+  const auto* ids = ids_cpu.const_data_ptr<std::int64_t>();
+  const auto batch_size = token_ids.size(0);
+  const auto token_count = token_ids.size(1);
+
+  for (std::int64_t batch = 0; batch < batch_size; ++batch) {
+    const auto offset = batch * token_count;
+    for (std::int64_t position = 0; position < token_count; ++position) {
+      std::vector<std::pair<std::int64_t, std::int64_t>> adjacent_runs;
+      const auto add_run = [&](const std::int64_t token, const std::int64_t count) {
+        if (token == mask_token_id ||
+            (eos_token_id.has_value() && token == *eos_token_id)) {
+          return;
+        }
+        for (auto& entry : adjacent_runs) {
+          if (entry.first == token) {
+            entry.second += count;
+            return;
+          }
+        }
+        adjacent_runs.emplace_back(token, count);
+      };
+
+      if (position > 0) {
+        const auto token = ids[offset + position - 1];
+        std::int64_t count = 1;
+        for (std::int64_t cursor = position - 2;
+             cursor >= 0 && ids[offset + cursor] == token;
+             --cursor) {
+          ++count;
+        }
+        add_run(token, count);
+      }
+      if (position + 1 < token_count) {
+        const auto token = ids[offset + position + 1];
+        std::int64_t count = 1;
+        for (std::int64_t cursor = position + 2;
+             cursor < token_count && ids[offset + cursor] == token;
+             ++cursor) {
+          ++count;
+        }
+        add_run(token, count);
+      }
+      for (const auto& [token, count] : adjacent_runs) {
+        adjusted.index_put_(
+            {batch, position, token},
+            adjusted.index({batch, position, token}) +
+                static_cast<double>(count) * log_multiplier);
+      }
+    }
+  }
+  return display_token_statistics(token_ids, adjusted);
 }
 
 

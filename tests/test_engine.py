@@ -26,6 +26,51 @@ def test_display_statistics_matches_reference() -> None:
     torch.testing.assert_close(actual[2], expected[2], rtol=2e-5, atol=2e-6)
 
 
+def test_display_statistics_with_repetition_matches_reference() -> None:
+    token_ids = torch.tensor([[7, 7, 7, 8, 7]])
+    logits = torch.zeros(1, 5, 16)
+    logits[..., 9] = 3.0
+    logits[..., 7] = 4.0
+
+    expected = reference.display_token_statistics_with_repetition(
+        token_ids,
+        logits,
+        5,
+        2,
+        0.7,
+    )
+    actual = cid_engine.display_token_statistics_with_repetition(
+        token_ids,
+        logits,
+        mask_token_id=5,
+        eos_token_id=2,
+        repetition_score_multiplier=0.7,
+    )
+
+    torch.testing.assert_close(actual[1], expected[1], rtol=0, atol=0)
+    torch.testing.assert_close(actual[0], expected[0], rtol=2e-5, atol=2e-6)
+    torch.testing.assert_close(actual[2], expected[2], rtol=2e-5, atol=2e-6)
+
+
+def test_display_statistics_with_repetition_penalizes_right_run() -> None:
+    token_ids = torch.tensor([[7, 7, 7]])
+    logits = torch.zeros(1, 3, 16)
+    logits[0, 0, 7] = 4.0
+    logits[0, 0, 8] = 3.0
+    logits[0, 1, 7] = 20.0
+    logits[0, 2, 7] = 20.0
+
+    _, predicted, _ = cid_engine.display_token_statistics_with_repetition(
+        token_ids,
+        logits,
+        mask_token_id=5,
+        eos_token_id=2,
+        repetition_score_multiplier=0.5,
+    )
+
+    assert predicted[0, 0].item() == 8
+
+
 def test_prefix_allocation_matches_reference() -> None:
     occupancy = torch.tensor(
         [

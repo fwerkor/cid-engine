@@ -132,6 +132,23 @@ def display_token_statistics(
     return torch.ops.cid_engine.display_token_statistics(token_ids, logits)
 
 
+def display_token_statistics_with_repetition(
+    token_ids: Tensor,
+    logits: Tensor,
+    *,
+    mask_token_id: int,
+    eos_token_id: int | None,
+    repetition_score_multiplier: float = 0.7,
+) -> tuple[Tensor, Tensor, Tensor]:
+    return torch.ops.cid_engine.display_token_statistics_with_repetition(
+        token_ids,
+        logits,
+        mask_token_id,
+        eos_token_id,
+        repetition_score_multiplier,
+    )
+
+
 def batched_linear_assignment(
     costs: Tensor,
     row_counts: Tensor,
@@ -221,6 +238,7 @@ __all__ = [
     "classify_attention_backend",
     "display_corrupt_from_random",
     "display_token_statistics",
+    "display_token_statistics_with_repetition",
     "live_slot_occupancy",
     "materialize_cell_snapshot",
     "masked_diffusion_corrupt_from_random",

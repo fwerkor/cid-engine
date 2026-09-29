@@ -72,6 +72,14 @@ std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics(
     const at::Tensor& token_ids,
     const at::Tensor& logits);
 
+std::tuple<at::Tensor, at::Tensor, at::Tensor>
+display_token_statistics_with_repetition(
+    const at::Tensor& token_ids,
+    const at::Tensor& logits,
+    std::int64_t mask_token_id,
+    const std::optional<std::int64_t>& eos_token_id,
+    double repetition_score_multiplier);
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor> display_token_statistics_cpu(
     const at::Tensor& token_ids,
     const at::Tensor& logits);

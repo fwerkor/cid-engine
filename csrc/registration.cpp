@@ -34,6 +34,10 @@ TORCH_LIBRARY(cid_engine, m) {
       "display_token_statistics(Tensor token_ids, Tensor logits) "
       "-> (Tensor, Tensor, Tensor)");
   m.def(
+      "display_token_statistics_with_repetition(Tensor token_ids, Tensor logits, "
+      "int mask_token_id, int? eos_token_id, float repetition_score_multiplier) "
+      "-> (Tensor, Tensor, Tensor)");
+  m.def(
       "refine_display_from_statistics(Tensor token_ids, Tensor confidence, "
       "Tensor predicted, Tensor current_confidence, int mask_token_id, "
       "int? eos_token_id, float reveal_fraction, float revision_fraction, "
@@ -65,6 +69,9 @@ TORCH_LIBRARY_IMPL(cid_engine, CompositeImplicitAutograd, m) {
   m.impl(
       "display_token_statistics",
       TORCH_FN(cid::engine::display_token_statistics));
+  m.impl(
+      "display_token_statistics_with_repetition",
+      TORCH_FN(cid::engine::display_token_statistics_with_repetition));
   m.impl(
       "refine_display_from_statistics",
       TORCH_FN(cid::engine::refine_display_from_statistics));
