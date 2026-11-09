@@ -4,6 +4,7 @@ from collections import defaultdict
 from collections.abc import Collection, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from platform import release
 from typing import Any
 
 import torch
@@ -109,6 +110,12 @@ class AsyncPinnedActivationOffloader:
         self.requires_grad_only = bool(requires_grad_only)
         self.d2h_stream = self.accelerator.Stream(device=self.device)
         self.h2d_stream = self.accelerator.Stream(device=self.device)
+        self._wsl_rocm = (
+            self.device.type == "cuda"
+            and torch.version.hip is not None
+            and "microsoft" in release().lower()
+        )
+        self._host_d2h_sync = self.device.type == "npu" or self._wsl_rocm
         self._pool = _PinnedTensorPool()
         self.last_offloaded_bytes = 0
         self.last_offloaded_tensors = 0
@@ -147,15 +154,14 @@ class AsyncPinnedActivationOffloader:
             dtype=handle.cpu_tensor.dtype,
             device=handle.device,
         )
-        if handle.device.type == "npu":
-            # torch_npu 2.7/CANN 8.3 does not reliably make completed D2H host
-            # writes visible to a dependent H2D copy through a device event
-            # alone. Defer the host wait until the activation is actually
-            # prefetched so forward D2H transfers can still overlap compute.
+        if self._host_d2h_sync:
+            # CANN and ROCm under WSL may require a host wait to make pinned
+            # D2H writes visible before a dependent H2D transfer. Delay this
+            # synchronization until prefetch to retain forward overlap.
             handle.d2h_ready.synchronize()
         with self.accelerator.stream(self.h2d_stream):
             self.h2d_stream.wait_event(handle.d2h_ready)
-            restored.copy_(handle.cpu_tensor, non_blocking=True)
+            restored.copy_(handle.cpu_tensor, non_blocking=not self._wsl_rocm)
             ready = self.accelerator.Event()
             ready.record(self.h2d_stream)
         handle.restored = restored
@@ -200,7 +206,7 @@ class AsyncPinnedActivationOffloader:
             current = self.accelerator.current_stream(self.device)
             self.d2h_stream.wait_stream(current)
             with self.accelerator.stream(self.d2h_stream):
-                cpu_tensor.copy_(tensor.detach(), non_blocking=True)
+                cpu_tensor.copy_(tensor.detach(), non_blocking=not self._wsl_rocm)
                 tensor.record_stream(self.d2h_stream)
                 ready = self.accelerator.Event()
                 ready.record(self.d2h_stream)

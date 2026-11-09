@@ -14,11 +14,14 @@ PyPI releases can be installed with:
     pip install cid-engine
 
 The current PyPI distribution is source-based so that installation can select the correct native
-backend for the target machine. A C++20 compiler is required. If the installed PyTorch build has
-CUDA support and `CUDA_HOME` points to a CUDA toolkit, the CUDA backend is built automatically.
-On Ascend systems with `torch_npu` installed, cid-engine builds its CANN backend and registers the
-same operators on PyTorch's NPU/PrivateUse1 dispatch key. Otherwise cid-engine builds its CPU
-backend.
+backend for the target machine. A C++20 compiler is required. If the installed PyTorch
+build has CUDA support and `CUDA_HOME` points to a CUDA toolkit, the NVIDIA backend is built
+automatically. When PyTorch has HIP support and `ROCM_HOME` points to a ROCm toolkit, the same
+kernels are built with HIP through PyTorch's HIPify integration. PyTorch exposes ROCm GPU
+devices as `cuda` tensors; the existing CUDA dispatch registrations therefore also apply to
+HIP. On Ascend systems with `torch_npu` installed, cid-engine builds its CANN backend and
+registers the same operators on PyTorch's NPU/PrivateUse1 dispatch key. Otherwise cid-engine
+builds its CPU backend.
 
 For an environment that already pins a particular PyTorch build, install against that exact local
 PyTorch ABI with:
@@ -29,6 +32,39 @@ Ascend builds require this non-isolated form: install a matching `torch` + `torc
 source the CANN environment first, then install cid-engine with `--no-build-isolation`. A generic
 PEP 517 build-isolation environment does not contain `torch_npu` and would therefore select the
 CPU backend.
+
+## ROCm / HIP development on WSL2
+
+For a ROCm-enabled PyTorch installation, build against the installed PyTorch ABI:
+
+    export ROCM_HOME=/opt/rocm
+    export PYTORCH_ROCM_ARCH=gfx1151  # Ryzen AI Max+ 395; adjust to your GPU
+    python -m pip install -e '.[dev]' --no-build-isolation
+    python -m pytest tests/test_cuda.py tests/test_rocm.py
+
+Use the wheel index and PyTorch/ROCm versions recommended for your GPU by AMD. The
+`CUDAExtension` build path HIPifies all eight `.cu` sources when `torch.version.hip` is
+present. The `CUDA_BACKEND_BUILT` flag denotes that GPU CUDA-dispatch kernels were
+compiled (this includes ROCm), while `ROCM_BACKEND_BUILT` identifies a HIP build.
+The CPU and CANN build paths remain available without a ROCm installation.
+
+For ROCm 10.1 builds, ensure the toolkit includes rocThrust/rocPRIM, hipSPARSE, hipBLAS,
+hipBLASLt, and hipSOLVER development headers, plus headers for the active Python version.
+AMD's modular ROCm packages may not install all these headers by default. On WSL2, pinned
+activation offload uses synchronous D2H/H2D transfers to preserve backward correctness;
+native Linux ROCm continues to use asynchronous copies.
+
+To keep local build artifacts inside the checkout, configure a local virtual environment
+and set the cache and temporary paths before installing dependencies:
+
+    mkdir -p .tmp .cache
+    export TMPDIR="$PWD/.tmp"
+    export XDG_CACHE_HOME="$PWD/.cache"
+    export PIP_CACHE_DIR="$PWD/.cache/pip"
+    export TORCH_EXTENSIONS_DIR="$PWD/.cache/torch_extensions"
+
+The generated `csrc/hip/` files, virtual environment, and local caches are ignored by Git.
+Use `--no-build-isolation` when a specific ROCm PyTorch wheel is already installed.
 
 ## Architecture
 
@@ -44,7 +80,7 @@ CPU backend.
     +-----------------------+
               |
               +---- CPU
-              +---- CUDA       (display, allocation, and materialization kernels)
+              +---- CUDA / ROCm HIP (shared GPU kernels via HIPify)
               +---- Ascend/CANN (torch_npu / PrivateUse1)
 
 The current C++ core owns CID-specific tensor primitives and the post-statistics display refinement policy:

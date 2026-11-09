@@ -217,6 +217,10 @@ def test_cuda_thought_corruption_training_path_matches_reference(dtype: torch.dt
     )
 
     rtol, atol = (4e-2, 5e-2) if dtype == torch.bfloat16 else (3e-3, 3e-4)
+    if torch.version.hip is not None and dtype == torch.float16:
+        # HIP FP16 mixing can differ by one rounded half-precision increment
+        # near cancellation; keep the original NVIDIA tolerance unchanged.
+        atol = 5e-4
     torch.testing.assert_close(actual[0], expected[0], rtol=rtol, atol=atol)
     torch.testing.assert_close(actual[1], expected[1], rtol=0, atol=0)
     torch.testing.assert_close(actual[2], expected[2], rtol=0, atol=0)
