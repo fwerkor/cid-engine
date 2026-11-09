@@ -7,6 +7,11 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 #else
   m.attr("cuda_backend_built") = pybind11::bool_(false);
 #endif
+#ifdef CID_ENGINE_WITH_ROCM
+  m.attr("rocm_backend_built") = pybind11::bool_(true);
+#else
+  m.attr("rocm_backend_built") = pybind11::bool_(false);
+#endif
 #ifdef CID_ENGINE_WITH_CANN
   m.attr("cann_backend_built") = pybind11::bool_(true);
 #else

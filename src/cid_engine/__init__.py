@@ -26,6 +26,7 @@ from cid_engine.gradient_stash import AsyncPinnedGradientAccumulator
 
 __version__ = distribution_version("cid-engine")
 CUDA_BACKEND_BUILT = bool(_C.cuda_backend_built)
+ROCM_BACKEND_BUILT = bool(_C.rocm_backend_built)
 CANN_BACKEND_BUILT = bool(_C.cann_backend_built)
 
 if CANN_BACKEND_BUILT:
@@ -233,6 +234,7 @@ __all__ = [
     "AttentionBackendReport",
     "CANN_BACKEND_BUILT",
     "CUDA_BACKEND_BUILT",
+    "ROCM_BACKEND_BUILT",
     "batched_linear_assignment",
     "checkpoint_fraction_for_budget",
     "classify_attention_backend",

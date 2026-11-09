@@ -6,6 +6,7 @@ import torch
 from setuptools import Extension, setup
 from torch.utils.cpp_extension import (
     CUDA_HOME,
+    ROCM_HOME,
     BuildExtension,
     CppExtension,
     CUDAExtension,
@@ -114,10 +115,12 @@ class CIDBuildExtension(BuildExtension):
         self.spawn(link_command)
 
 
-with_cuda = torch.version.cuda is not None and CUDA_HOME is not None
+with_rocm = torch.version.hip is not None and ROCM_HOME is not None
+with_cuda = not with_rocm and torch.version.cuda is not None and CUDA_HOME is not None
+with_gpu = with_cuda or with_rocm
 with_cann = False
 NpuExtension = None
-if not with_cuda:
+if not with_gpu:
     try:
         import torch_npu  # noqa: F401
         from torch_npu.utils.cpp_extension import NpuExtension
@@ -133,7 +136,7 @@ sources = [
     "csrc/registration.cpp",
     "csrc/bindings.cpp",
 ]
-if with_cuda:
+if with_gpu:
     sources.extend(
         [
             "csrc/cuda/display_stats.cu",
@@ -160,17 +163,19 @@ elif with_cann:
 # is built into the same extension.
 compile_args = {"cxx": ["-O3", "-std=c++20", "-march=native", "-fopenmp"]}
 link_args = ["-fopenmp"]
-if with_cuda:
+if with_gpu:
+    # PyTorch exposes HIP tensors under the CUDA dispatch key and CUDAExtension
+    # HIPifies the .cu sources automatically when torch.version.hip is set.
     compile_args["cxx"].append("-DCID_ENGINE_WITH_CUDA=1")
-    compile_args["nvcc"] = [
-        "-O3",
-        "-std=c++20",
-        "--expt-relaxed-constexpr",
-    ]
+    compile_args["nvcc"] = ["-O3", "-std=c++20"]
+    if with_cuda:
+        compile_args["nvcc"].append("--expt-relaxed-constexpr")
+    if with_rocm:
+        compile_args["cxx"].append("-DCID_ENGINE_WITH_ROCM=1")
 elif with_cann:
     compile_args["cxx"].append("-DCID_ENGINE_WITH_CANN=1")
 
-if with_cuda:
+if with_gpu:
     extension = CUDAExtension
 elif with_cann:
     assert NpuExtension is not None

@@ -5,6 +5,9 @@ __pycache__/
 .hypothesis/
 .ruff_cache/
 .venv/
+.tmp/
+.cache/
+csrc/hip/
 dist/
 build/
 build-fuzz/
